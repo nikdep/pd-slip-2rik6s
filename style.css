@@ -1,0 +1,62 @@
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--txt:#e6edf3;--muted:#8b949e;--dim:#6e7681;
+--green:#2ecc71;--red:#ef4444;--amber:#f5a623;--grey:#6e7681;--blue:#58a6ff;--track:#262c34;--tag:#28344a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:17px/1.35 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
+body{padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+header{position:sticky;top:0;z-index:5;background:rgba(13,17,23,.96);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:12px 14px 10px;border-bottom:1px solid var(--border)}
+.toprow{display:flex;align-items:center;justify-content:space-between}
+h1{font-size:24px;margin:0;font-weight:800;letter-spacing:.2px}
+#refresh{background:var(--card);color:var(--txt);border:1px solid var(--border);border-radius:12px;font-size:22px;width:44px;height:40px}
+#refresh.spin{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.muted{color:var(--muted)}.dim{color:var(--dim)}
+#updated{font-size:14px;margin-top:2px}
+#updated .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--green);margin-right:6px;vertical-align:1px}
+#updated .dot.stale{background:var(--amber)}
+.summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:8px 10px}
+.stat .k{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+.stat .v{font-size:21px;font-weight:800;margin-top:1px}
+.counts{grid-column:1/-1;font-size:15px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap}
+.counts b{color:var(--txt)}
+main{padding:12px 12px 40px;max-width:720px;margin:0 auto}
+.games{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:6px;scrollbar-width:none}
+.games::-webkit-scrollbar{display:none}
+.gchip{flex:0 0 auto;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:7px 11px;font-size:14px;white-space:nowrap}
+.gchip .sc{font-weight:800;color:var(--blue);margin:0 4px}
+.gchip .cl{color:var(--muted)}.gchip.in .cl{color:var(--amber);font-weight:700}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;margin:12px 0;overflow:hidden;position:relative}
+.card::before{content:"";position:absolute;left:0;top:0;bottom:0;width:6px;background:var(--st)}
+.card.alive{--st:var(--amber)}.card.won{--st:var(--green)}.card.lost{--st:var(--red)}.card.pending{--st:var(--blue)}
+.card.lost{opacity:.72}
+.chead{padding:14px 14px 10px 20px;border-bottom:1px solid var(--border)}
+.crow{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.ctitle{font-size:19px;font-weight:800}
+.cid{font-size:13px;color:var(--muted);margin-top:1px}
+.pill{flex:0 0 auto;font-size:13px;font-weight:800;border-radius:999px;padding:5px 11px;color:#0b0b0b;background:var(--st);letter-spacing:.4px}
+.money{display:flex;gap:16px;margin-top:10px;flex-wrap:wrap}
+.money div{font-size:13px;color:var(--muted)}.money b{display:block;font-size:19px;color:var(--txt)}
+.money .pay b{color:var(--green)}.card.lost .money .pay b{color:var(--muted);text-decoration:line-through}
+.legcounts{margin-top:8px;font-size:14px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
+.legcounts .h{color:var(--green)}.legcounts .l{color:var(--amber)}.legcounts .x{color:var(--red)}
+.leg{padding:12px 14px 12px 20px;border-bottom:1px solid #21262d}
+.leg:last-child{border-bottom:0}
+.lrow{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.who{font-size:18px;font-weight:700}
+.who .tm{font-weight:600;color:var(--blue)}
+.lpill{flex:0 0 auto;font-size:12px;font-weight:800;border-radius:999px;padding:4px 9px;color:#0b0b0b}
+.HIT .lpill{background:var(--green)}.LIVE .lpill{background:var(--amber)}.MISS .lpill{background:var(--red)}
+.PENDING .lpill,.VOID .lpill,.NF .lpill{background:var(--grey);color:#e6edf3}
+.what{display:flex;align-items:center;gap:12px;margin-top:6px}
+.what .lbl{font-size:16px;color:var(--txt);min-width:0;flex:0 1 auto}
+.what .num{font-size:24px;font-weight:800;margin-left:auto;white-space:nowrap}
+.HIT .num{color:var(--green)}.LIVE .num{color:var(--amber)}.MISS .num{color:var(--red)}.PENDING .num{color:var(--muted)}
+.bar{height:12px;background:var(--track);border-radius:7px;margin-top:8px;position:relative;overflow:hidden}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:7px;background:var(--grey);transition:width .5s}
+.HIT .bar i{background:var(--green)}.LIVE .bar i{background:var(--amber)}.MISS .bar i{background:var(--red)}
+.bar s{position:absolute;top:0;bottom:0;width:3px;background:var(--card)}
+.game{margin-top:7px;font-size:14px;color:var(--muted)}
+.game .gc{color:var(--dim)}.game .gc.in{color:var(--amber);font-weight:700}
+.game .note{color:var(--dim)}
+.MISS .who{color:#d98a8a}
+.foot{font-size:13px;color:var(--dim);text-align:center;margin-top:18px;line-height:1.5}
+.err{background:#3a1d1d;border:1px solid #6b2a2a;color:#fca5a5;border-radius:12px;padding:10px 12px;font-size:14px;margin:8px 0}
