@@ -122,76 +122,96 @@ function gameInfo(key) {
   return {...s, ...Object.fromEntries(Object.entries(l).filter(([k]) => k !== "people"))};
 }
 
-function gameLine(key) {
+const ABBR = {sog: "SOG", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
+const COLLAPSE_KEY = "betslip-collapsed";
+let collapsed = {};
+try { collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}"); } catch (e) { collapsed = {}; }
+const params = new URLSearchParams(location.search);
+const focusId = params.get("focus");
+
+function startET(g) { return g.start_utc ? etTime(new Date(g.start_utc)) : (g.start_et || ""); }
+
+function gameHead(key) {
   const g = gameInfo(key);
-  const names = g.away_name ? `${esc(g.away_name)} @ ${esc(g.home_name)}` : esc(key.replace("@", " @ "));
-  const start = g.start_utc ? etTime(new Date(g.start_utc)) : (g.start_et || "");
-  let state = "";
-  if (g.state === "in") state = ` · <span class="gc in">${esc(g.away_score)}-${esc(g.home_score)} ${esc(g.clock)}</span>`;
-  else if (g.state === "post") state = ` · <span class="gc">${esc(g.away_score)}-${esc(g.home_score)} ${esc(g.clock)}</span>`;
-  return `${names} · ${esc(start)}${state}`;
+  const names = g.away_name ? `${nick(g.away_name)} @ ${nick(g.home_name)}` : key.replace("@", " @ ");
+  let st = "";
+  if (g.state === "in") st = `<span class="s in">${esc(g.away_score)}-${esc(g.home_score)} · ${esc(g.clock)}</span>`;
+  else if (g.state === "post") st = `<span class="s">${esc(g.away_score)}-${esc(g.home_score)} · ${esc(g.clock)}</span>`;
+  else st = `<span class="s">not started</span>`;
+  return `<div class="ghead"><span class="m">${esc(names)}</span><span class="t">${esc(startET(g))}</span>${st}</div>`;
 }
 
 function legHTML(l) {
-  const g = gameInfo(l.game);
-  const tname = l.team === g.away ? g.away_name : l.team === g.home ? g.home_name : (l.team_name || l.team);
-  const last = l.player.split(" ").slice(1).join(" ") || l.player;
-  const word = (STATS[l.stat] || [0, 0, "shots"])[2];
   const cls = {"VOID?": "VOID", "NOT FOUND": "NF"}[l.status] || l.status;
-  const pillTxt = {HIT: "HIT", LIVE: "LIVE", MISS: "LOST", PENDING: "UPCOMING", "VOID?": "VOID?", "NOT FOUND": "NOT FOUND"}[l.status];
   const frac = l.target ? Math.min(l.value / l.target, 1) : 1;
-  let ticks = "";
-  if (l.target > 1 && l.target <= 12) for (let k = 1; k < l.target; k++) ticks += `<s style="left:calc(${(100 * k) / l.target}% - 1px)"></s>`;
-  const need = l.stat === "k" ? `over ${l.line ?? l.target - 0.5}` : l.stat === "goals" ? "to score" : l.stat === "hr" ? "to homer" : `needs ${l.target}+`;
-  return `<div class="leg ${cls}">
-    <div class="lrow"><div class="who">${esc(l.player)} <span class="tm">(${esc(nick(tname || l.team))})</span></div><span class="lpill">${pillTxt}</span></div>
-    <div class="what"><span class="lbl">${esc(last)} ${esc(word)} <span class="muted">· ${esc(need)}</span></span><span class="num">${l.value}/${l.target}</span></div>
-    <div class="bar"><i style="width:${(frac * 100).toFixed(1)}%"></i>${ticks}</div>
-    <div class="game">${gameLine(l.game)}${l.note ? ` · <span class="note">${esc(l.note)}</span>` : ""}</div>
-  </div>`;
+  const stat = l.stat === "k" ? `K o${l.line ?? l.target - 0.5}` : (ABBR[l.stat] || "SOG");
+  const tm = espnTeam(l.team || l.sheet_team);
+  const note = l.note && !["on roster", "in lineup"].includes(l.note) ? `<span class="nt">${esc(l.note)}</span>` : "";
+  const title = `${l.player} (${tm}) ${stat} ${l.value}/${l.target} ${l.status}`;
+  return `<div class="leg ${cls}" title="${esc(title)}"><span class="dot"></span>` +
+    `<span class="nm">${esc(l.player)} <span class="tm">(${esc(tm)})</span><span class="st">${esc(stat)}</span>${note}</span>` +
+    `<span class="v">${l.value}<span class="tg">/${l.target}</span></span>` +
+    `<span class="bar"><i style="width:${(frac * 100).toFixed(1)}%"></i></span></div>`;
+}
+
+function isCollapsed(b) {
+  if (focusId && b.id === focusId) return false;
+  return b.id in collapsed ? collapsed[b.id] : b.status !== "alive"; // live/alive bets open by default
 }
 
 function render() {
   if (!DATA) return;
   const bets = recompute();
   const order = {alive: 0, won: 0, lost: 1};
-  const sorted = bets.map((b, i) => [b, i]).sort((a, b) => order[a[0].status] - order[b[0].status] || a[1] - b[1]).map((x) => x[0]);
+  const pin = (b) => (focusId && b.id === focusId ? 0 : 1); // ?focus=Row%2088 pins that bet to the top
+  const sorted = bets.map((b, i) => [b, i]).sort((a, b) => pin(a[0]) - pin(b[0]) || order[a[0].status] - order[b[0].status] || a[1] - b[1]).map((x) => x[0]);
   const staked = bets.reduce((a, b) => a + b.stake, 0), pot = bets.reduce((a, b) => a + b.payout, 0);
   const alive = bets.filter((b) => b.status === "alive"), won = bets.filter((b) => b.status === "won"), lost = bets.filter((b) => b.status === "lost");
   const stillLive = alive.concat(won).reduce((a, b) => a + b.payout, 0);
   $("#title").textContent = DATA.title && DATA.title !== "Bet Tracker" ? DATA.title : "Bet Slip";
   const day = DATA.date ? new Date(DATA.date + "T12:00:00Z").toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric", timeZone: "UTC"}) : "";
-  $("#summary").innerHTML = `
+  $("#summary").innerHTML = `<div class="summary">
     <div class="stat"><div class="k">Staked</div><div class="v">${money(staked)}</div></div>
     <div class="stat"><div class="k">Potential</div><div class="v" style="color:var(--green)">${money(pot)}</div></div>
-    <div class="stat"><div class="k">Still live</div><div class="v" style="color:var(--blue)">${money(stillLive)}</div></div>
+    <div class="stat"><div class="k">Still live</div><div class="v" style="color:var(--blue)">${money(stillLive)}</div></div></div>
     <div class="counts"><span>${esc(day)}</span><span><b>${bets.length}</b> bets</span><span><b style="color:var(--amber)">${alive.length}</b> alive</span><span><b style="color:var(--green)">${won.length}</b> won</span><span><b style="color:var(--red)">${lost.length}</b> lost</span></div>`;
   const upd = lastLiveOk && lastLiveOk > new Date(DATA.generated_at) ? lastLiveOk : new Date(DATA.generated_at);
   const stale = Date.now() - upd.getTime() > 5 * 60000;
-  $("#updated").innerHTML = `<span class="dot${stale ? " stale" : ""}"></span>Updated ${etTime(upd)}${lastLiveOk ? " · live from ESPN" : ""} · auto-refresh 60s`;
-  // games strip
+  $("#updated").innerHTML = `<span class="dot${stale ? " stale" : ""}"></span>${etTime(upd)}${lastLiveOk ? " · live" : ""}`;
   $("#games").innerHTML = Object.keys(DATA.games).map((k) => {
     const g = gameInfo(k);
-    const start = g.start_utc ? etTime(new Date(g.start_utc)) : g.start_et || "";
     const sc = g.state === "in" || g.state === "post" ? `<span class="sc">${esc(g.away_score)}-${esc(g.home_score)}</span>` : " ";
-    const cl = g.state === "pre" ? start : g.clock;
+    const cl = g.state === "pre" ? startET(g) : g.clock;
     return `<div class="gchip ${esc(g.state)}">${esc(g.away)} @ ${esc(g.home)}${sc}<span class="cl">${esc(cl)}</span></div>`;
   }).join("");
   $("#bets").innerHTML = sorted.map((b) => {
     const cls = b.status === "alive" && !b.anyStarted ? "pending" : b.status;
-    const pill = {alive: b.anyStarted ? "ALIVE" : "ALIVE · NOT STARTED", won: "WON", lost: "LOST"}[b.status];
-    return `<article class="card ${cls}">
-      <div class="chead">
-        <div class="crow"><div><div class="ctitle">${esc(b.title)}</div><div class="cid">${esc(b.book)} · ${b.n}-leg · ${esc(b.id)}</div></div><span class="pill">${pill}</span></div>
-        <div class="money"><div>Stake<b>${money(b.stake)}</b></div><div>Odds<b>${esc(b.odds)}</b></div><div class="pay">Payout<b>${money(b.payout)}</b></div></div>
-        <div class="legcounts"><span class="h">✓ ${b.hit} hit</span><span class="l">● ${b.live} live</span><span class="x">✗ ${b.lost} lost</span><span>${b.pending} to start</span></div>
-      </div>
-      ${b.legs.map(legHTML).join("")}
+    const pill = {alive: b.anyStarted ? "ALIVE" : "NOT STARTED", won: "WON", lost: "LOST"}[b.status];
+    const games = [...new Set(b.legs.map((l) => l.game))];
+    const body = games.map((gk) => gameHead(gk) + b.legs.filter((l) => l.game === gk).map(legHTML).join("")).join("");
+    return `<article class="card ${cls}${isCollapsed(b) ? " collapsed" : ""}" id="${esc(b.id.replace(/\s+/g, "-"))}" data-id="${esc(b.id)}">
+      <button class="chead" aria-expanded="${!isCollapsed(b)}">
+        <div class="crow"><span class="chev">▼</span><span class="ctitle">${esc(b.title)}</span><span class="pill">${pill}</span></div>
+        <div class="chips"><span class="chip"><span class="h"><b>✓${b.hit}</b></span> <span class="l"><b>●${b.live}</b></span> <span class="x"><b>✗${b.lost}</b></span>${b.pending ? ` · ${b.pending} to go` : ""}</span><span class="chip"><b>${esc(b.odds)}</b></span><span class="chip pay">${money(b.stake)} → <b>${money(b.payout)}</b></span></div>
+      </button>
+      <div class="legs">${body}</div>
     </article>`;
   }).join("");
   const ex = (DATA.excluded || []).length ? "Not shown (not live bets): " + DATA.excluded.map(esc).join("; ") + "<br>" : "";
-  $("#foot").innerHTML = `${ex}Stats: ESPN box scores. LOST = game over (or pitcher pulled) short of target. Informational only.<br>Data file generated ${esc(DATA.generated_et || "")}.`;
+  $("#foot").innerHTML = `<div class="legend"><span style="--c:var(--green)">hit</span><span style="--c:var(--amber)">live</span><span style="--c:var(--red)">lost</span><span style="--c:var(--grey)">not started</span></div>${ex}FanDuel · stats from ESPN box scores. LOST = game over (or pitcher pulled) short of target. Tap a bet to collapse/expand.<br>Data file generated ${esc(DATA.generated_et || "")}.`;
+  document.documentElement.style.setProperty("--hdr", $("header").offsetHeight + "px");
 }
+
+document.addEventListener("click", (e) => {
+  const h = e.target.closest(".chead");
+  if (!h) return;
+  const card = h.closest(".card"), id = card.dataset.id;
+  const now = !card.classList.contains("collapsed");
+  card.classList.toggle("collapsed", now);
+  h.setAttribute("aria-expanded", String(!now));
+  collapsed[id] = now;
+  try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed)); } catch (err) { /* private mode */ }
+});
 
 async function refresh() {
   if (busy) return; busy = true;

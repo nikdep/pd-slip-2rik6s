@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<script>if(/[?&]sim=1/.test(location.search))document.documentElement.className="sim"</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>Bet Slip</title>
@@ -17,22 +18,22 @@
 <meta name="apple-mobile-web-app-title" content="Bet Slip">
 <meta name="application-name" content="Bet Slip">
 <meta name="format-detection" content="telephone=no">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <header id="top">
   <div class="toprow">
     <h1 id="title">Bet Slip</h1>
+    <div id="updated">Loading…</div>
     <button id="refresh" aria-label="Refresh now">&#x21bb;</button>
   </div>
-  <div id="updated" class="muted">Loading…</div>
-  <div id="summary" class="summary"></div>
+  <div id="summary"></div>
+  <div id="games" class="games"></div>
 </header>
 <main>
-  <section id="games" class="games"></section>
   <section id="bets"></section>
   <p id="foot" class="foot"></p>
 </main>
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
