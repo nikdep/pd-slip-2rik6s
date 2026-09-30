@@ -94,8 +94,10 @@ function evalLeg(leg, g) {
   else if (g.state === "in") status = p ? "LIVE" : "NOT FOUND";
   else status = "PENDING";
   if (status === "LIVE" && leg.stat === "k" && p && p.pulled) status = "MISS"; // starter relieved: no more Ks
+  const noBox = !Object.keys(g.people).length;
+  if (status === "NOT FOUND" && noBox) status = "PENDING"; // game flagged live but box score not posted yet
   let note = leg.note;
-  if (g.state !== "pre") note = p ? detail(p, leg.stat, g) : (g.state === "post" ? "not in box score" : "not in box score yet");
+  if (g.state !== "pre") note = p ? detail(p, leg.stat, g) : noBox ? "box score not posted yet" : (g.state === "post" ? "not in box score" : "not in box score yet");
   return {...leg, value: val, status, note, team: p ? p.team : leg.team};
 }
 

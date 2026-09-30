@@ -1,7 +1,7 @@
 /* Network-first service worker: always tries the network (so bets.json and app updates are
    fresh), falls back to the last cached copy when offline. ESPN (cross-origin) is not touched. */
-const CACHE = "betslip-v1";
-const SHELL = ["./", "index.html", "style.css?v=1", "app.js?v=1", "manifest.json", "bets.json",
+const CACHE = "betslip-v2";
+const SHELL = ["./", "index.html", "style.css?v=2", "app.js?v=2", "manifest.json", "bets.json",
   "icons/icon-180.png", "icons/icon-192.png", "icons/icon-512.png"];
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).catch(() => {}).then(() => self.skipWaiting()));
