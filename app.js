@@ -4,7 +4,7 @@
 const REFRESH_MS = 30000;
 const TZ = "America/Toronto";
 const STATS = { // stat -> [box-score group or null, keys summed, word]
-  sog: [null, ["shotsTotal"], "shots"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
+  sog: [null, ["shotsTotal"], "shots"], saves: ["goalies", ["saves"], "saves"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
   goals: [null, ["goals"], "goals"], hits: ["batting", ["hits"], "hits"],
   hr: ["batting", ["homeRuns"], "home runs"], k: ["pitching", ["strikeouts"], "strikeouts"],
 };
