@@ -4,7 +4,7 @@
 const REFRESH_MS = 60000;
 const TZ = "America/Toronto";
 const STATS = { // stat -> [box-score group or null, keys summed, word]
-  sog: [null, ["shotsTotal"], "shots"], points: [null, ["goals", "assists"], "points"],
+  sog: [null, ["shotsTotal"], "shots"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
   goals: [null, ["goals"], "goals"], hits: ["batting", ["hits"], "hits"],
   hr: ["batting", ["homeRuns"], "home runs"], k: ["pitching", ["strikeouts"], "strikeouts"],
 };
@@ -95,7 +95,7 @@ function evalLeg(leg, g) {
   else status = "PENDING";
   if (status === "LIVE" && leg.stat === "k" && p && p.pulled) status = "MISS"; // starter relieved: no more Ks
   const noBox = !Object.keys(g.people).length;
-  if (status === "NOT FOUND" && noBox) status = "PENDING"; // game flagged live but box score not posted yet
+  if (status === "NOT FOUND" && (noBox || g.sport === "nfl")) status = "PENDING"; // early NFL box score may omit offensive stats
   let note = leg.note;
   if (g.state !== "pre") note = p ? detail(p, leg.stat, g) : noBox ? "box score not posted yet" : (g.state === "post" ? "not in box score" : "not in box score yet");
   return {...leg, value: val, status, note, team: p ? p.team : leg.team};
@@ -122,7 +122,7 @@ function gameInfo(key) {
   return {...s, ...Object.fromEntries(Object.entries(l).filter(([k]) => k !== "people"))};
 }
 
-const ABBR = {sog: "SOG", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
+const ABBR = {sog: "SOG", receptions: "REC", pass_tds: "TD", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
 const COLLAPSE_KEY = "betslip-collapsed";
 let collapsed = {};
 try { collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}"); } catch (e) { collapsed = {}; }
