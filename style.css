@@ -1,6 +1,4 @@
-:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--txt:#e6edf3;--muted:#8b949e;--dim:#7d8590;
---green:#2ecc71;--red:#ef4444;--amber:#f5a623;--grey:#6e7681;--blue:#58a6ff;--track:#262c34;
---sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--sal:env(safe-area-inset-left,0px);--sar:env(safe-area-inset-right,0px)}
+:root{--bg:#0d1117;--card:#161b22;--border:#30363d;--txt:#e6edf3;--muted:#8b949e;--dim:#7d8590;--green:#2ecc71;--red:#ef4444;--amber:#f5a623;--grey:#6e7681;--blue:#58a6ff;--track:#262c34;--sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);--sal:env(safe-area-inset-left,0px);--sar:env(safe-area-inset-right,0px)}
 html.sim{--sat:62px;--sab:34px} /* ?sim=1 : preview iPhone 16 Pro safe areas in a desktop browser */
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.3 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-text-size-adjust:100%}
@@ -22,6 +20,7 @@ h1{font-size:19px;margin:0;font-weight:800;white-space:nowrap}
 .counts b{color:var(--txt)}
 .games{display:flex;gap:6px;overflow-x:auto;margin-top:6px;scrollbar-width:none}
 .games::-webkit-scrollbar{display:none}
+.daynav{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:7px}.daynav button{background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--txt);font-weight:700;padding:3px 9px;min-width:34px}.daynav button:active{background:var(--border)}.daynav .daylabel{min-width:92px;text-align:center;font-weight:800;color:var(--txt)}
 .gchip{flex:0 0 auto;background:var(--card);border:1px solid var(--border);border-radius:9px;padding:3px 8px;font-size:13px;white-space:nowrap}
 .gchip .sc{font-weight:800;color:var(--blue);margin:0 3px}
 .gchip .cl{color:var(--muted);margin-left:3px}.gchip.in .cl{color:var(--amber);font-weight:700}
@@ -40,7 +39,7 @@ main{padding:8px 8px 24px;max-width:720px;margin:0 auto}
 .chip{font-size:13px;border-radius:7px;padding:1px 7px;background:#0f141a;border:1px solid #262c34;color:var(--muted);white-space:nowrap}
 .chip b{color:var(--txt);font-weight:700}
 .chip .h b{color:var(--green)}.chip .l b{color:var(--amber)}.chip .x b{color:var(--red)}
-.chip.pay b{color:var(--green)}.card.lost .chip.pay b{color:var(--muted);text-decoration:line-through}
+.chip.pay b{color:var(--green)}.card.lost .chip.pay b{color:var(--muted);text-decoration:line-through}.chip.bonus-pay{background:#F5B700;border-color:#F5B700;color:#111;font-weight:800}.chip.bonus-pay b{color:#111;font-weight:800}
 .legs{border-top:1px solid var(--border)}
 .card.collapsed .legs{display:none}
 .ghead{display:flex;gap:6px;align-items:baseline;padding:4px 10px 2px 13px;font-size:13px;color:var(--dim);background:#12171e;white-space:nowrap;overflow:hidden}
@@ -67,3 +66,4 @@ main{padding:8px 8px 24px;max-width:720px;margin:0 auto}
 .legend{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:6px}
 .legend span::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;background:var(--c)}
 .err{background:#3a1d1d;border:1px solid #6b2a2a;color:#fca5a5;border-radius:10px;padding:8px 10px;font-size:13px;margin:6px 0}
+.empty{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;color:var(--muted);font-weight:700}
