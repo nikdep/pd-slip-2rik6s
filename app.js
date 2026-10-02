@@ -1,5 +1,5 @@
 /* Bet Slip PWA: loads bets.json (bet definitions + server snapshot) and re-computes live
-   progress every 30s from ESPN box scores (soccer: FotMob player stats first, ESPN fallback). */
+  progress every 30s from ESPN box scores (soccer: FotMob player stats first, ESPN fallback). */
 "use strict";
 const REFRESH_MS = 30000;
 const TZ = "America/Toronto";
@@ -20,6 +20,7 @@ const NICK = {"Maple Leafs": "Leafs", "Golden Knights": "Knights", "Blue Jackets
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money = (x) => "$" + Number(x || 0).toFixed(2);
+const wholeMoney = (x) => "$" + Number(x || 0).toFixed(0);
 const etTime = (d) => new Intl.DateTimeFormat("en-US", {timeZone: TZ, hour: "numeric", minute: "2-digit"}).format(d) + " ET";
 const espnTeam = (t) => TEAM_ALIAS[(t || "").toUpperCase()] || (t || "").toUpperCase();
 const nick = (n) => NICK[n] || n;
@@ -33,6 +34,12 @@ const lastNorm = (s) => {
 };
 
 let DATA = null, LIVE = {}, lastLiveOk = null, busy = false;
+const isoET = () => new Intl.DateTimeFormat("en-CA", {timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit"}).format(new Date());
+let viewDate = isoET(), DAY_INDEX = [];
+const dateLabel = (d) => new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric", timeZone: "UTC"});
+const shiftDate = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
+const emptyData = (d) => ({version: 1, date: d, title: "Bet Tracker", generated_at: new Date().toISOString(), generated_et: etTime(new Date()), summary: {bets: 0, staked: 0, potential_payout: 0, live_payout: 0, alive: 0, won: 0, lost: 0}, games: {}, bets: [], excluded: []});
+function renderDayNav() { const el = $("#daynav"); if (!el) return; el.innerHTML = `<button data-day-shift="-1" aria-label="Previous day">‹</button><span class="daylabel">${esc(dateLabel(viewDate))}</span><button data-day-shift="1" aria-label="Next day">›</button><button data-day-today="1">Today</button>`; }
 
 async function getJSON(url, ms = 15000) {
   const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
@@ -221,6 +228,7 @@ function isCollapsed(b) {
 
 function render() {
   if (!DATA) return;
+  renderDayNav();
   const bets = recompute();
   const order = {alive: 0, won: 0, lost: 1};
   const pin = (b) => (focusId && b.id === focusId ? 0 : 1); // ?focus=Row%2088 pins that bet to the top
@@ -244,25 +252,31 @@ function render() {
     const cl = g.state === "pre" ? startET(g) : g.clock;
     return `<div class="gchip ${esc(g.state)}">${esc(g.away)} @ ${esc(g.home)}${sc}<span class="cl">${esc(cl)}</span></div>`;
   }).join("");
-  $("#bets").innerHTML = sorted.map((b) => {
+  $("#bets").innerHTML = sorted.length ? sorted.map((b) => {
     const cls = b.status === "alive" && !b.anyStarted ? "pending" : b.status;
     const pill = {alive: b.anyStarted ? "ALIVE" : "NOT STARTED", won: "WON", lost: "LOST"}[b.status];
     const games = [...new Set(b.legs.map((l) => l.game))];
     const body = games.map((gk) => gameHead(gk) + b.legs.filter((l) => l.game === gk).map(legHTML).join("")).join("");
+    const bonus = b.bonus || Number(b.bonus_stake || 0) > 0;
+    const payChip = bonus ? `<span class="chip pay bonus-pay"><b>${wholeMoney(b.bonus_stake || b.stake)}</b> → <b>${money(b.payout)}</b></span>` : `<span class="chip pay">${money(b.stake)} → <b>${money(b.payout)}</b></span>`;
     return `<article class="card ${cls}${isCollapsed(b) ? " collapsed" : ""}" id="${esc(b.id.replace(/\s+/g, "-"))}" data-id="${esc(b.id)}">
       <button class="chead" aria-expanded="${!isCollapsed(b)}">
         <div class="crow"><span class="chev">▼</span><span class="ctitle">${esc(b.title)}</span><span class="pill">${pill}</span></div>
-        <div class="chips"><span class="chip"><span class="h"><b>✓${b.hit}</b></span> <span class="l"><b>●${b.live}</b></span> <span class="x"><b>✗${b.lost}</b></span>${b.pending ? ` · ${b.pending} to go` : ""}</span><span class="chip"><b>${esc(b.odds)}</b></span><span class="chip pay">${money(b.stake)} → <b>${money(b.payout)}</b></span></div>
+        <div class="chips"><span class="chip"><span class="h"><b>✓${b.hit}</b></span> <span class="l"><b>●${b.live}</b></span> <span class="x"><b>✗${b.lost}</b></span>${b.pending ? ` · ${b.pending} to go` : ""}</span><span class="chip"><b>${esc(b.odds)}</b></span>${payChip}</div>
       </button>
       <div class="legs">${body}</div>
     </article>`;
-  }).join("");
+  }).join("") : `<div class="empty">No bets this day</div>`;
   const ex = (DATA.excluded || []).length ? "Not shown (not live bets): " + DATA.excluded.map(esc).join("; ") + "<br>" : "";
   $("#foot").innerHTML = `<div class="legend"><span style="--c:var(--green)">hit</span><span style="--c:var(--amber)">live</span><span style="--c:var(--red)">lost</span><span style="--c:var(--grey)">not started</span></div>${ex}${esc(DATA.bets[0] && DATA.bets[0].book || "FanDuel")} · stats from ${Object.values(DATA.games).some((g) => g.sport === "soccer") ? "FotMob (primary) + ESPN" : "ESPN box scores"}. LOST = game over (or pitcher pulled) short of target. Tap a bet to collapse/expand.<br>Data file generated ${esc(DATA.generated_et || "")}.`;
   document.documentElement.style.setProperty("--hdr", $("header").offsetHeight + "px");
 }
 
 document.addEventListener("click", (e) => {
+  const shift = e.target.closest("[data-day-shift]");
+  if (shift) { viewDate = shiftDate(viewDate, Number(shift.dataset.dayShift)); LIVE = {}; refresh(); return; }
+  const todayBtn = e.target.closest("[data-day-today]");
+  if (todayBtn) { viewDate = isoET(); LIVE = {}; refresh(); return; }
   const h = e.target.closest(".chead");
   if (!h) return;
   const card = h.closest(".card"), id = card.dataset.id;
@@ -309,8 +323,12 @@ async function refresh() {
   if (busy) return; busy = true;
   $("#refresh").classList.add("spin");
   try {
-    try { DATA = await getJSON("bets.json?t=" + Date.now()); }
-    catch (e) { if (!DATA) throw e; }
+    const today = isoET();
+    const dataURL = viewDate === today ? "bets.json?t=" + Date.now() : `days/${viewDate}.json?t=${Date.now()}`;
+    try { DATA = await getJSON(dataURL); }
+    catch (e) { if (viewDate === today && DATA) { /* keep last current-day data */ } else { DATA = emptyData(viewDate); LIVE = {}; render(); return; } }
+    const openDay = DATA.bets.some((b) => b.status === "alive" || b.raw_status === "LIVE" || b.raw_status === "PENDING");
+    if (viewDate !== today && !openDay) { LIVE = {}; render(); return; }
     const keys = Object.keys(DATA.games);
     const res = await Promise.allSettled(keys.map(async (k) => {
       const g = DATA.games[k];
@@ -336,5 +354,6 @@ async function refresh() {
 $("#refresh").addEventListener("click", refresh);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh(); });
 setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
+getJSON("days/index.json").then((d) => { DAY_INDEX = d.dates || []; }).catch(() => {});
 refresh();
 if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
