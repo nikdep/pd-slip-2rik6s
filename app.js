@@ -1,13 +1,20 @@
 /* Bet Slip PWA: loads bets.json (bet definitions + server snapshot) and re-computes live
-   progress straight from ESPN box scores every 60s (same rules as live_tracker.py). */
+   progress every 30s from ESPN box scores (soccer: FotMob player stats first, ESPN fallback). */
 "use strict";
-const REFRESH_MS = 60000;
+const REFRESH_MS = 30000;
 const TZ = "America/Toronto";
 const STATS = { // stat -> [box-score group or null, keys summed, word]
   sog: [null, ["shotsTotal"], "shots"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
   goals: [null, ["goals"], "goals"], hits: ["batting", ["hits"], "hits"],
   hr: ["batting", ["homeRuns"], "home runs"], k: ["pitching", ["strikeouts"], "strikeouts"],
 };
+// Soccer player props: FotMob matchDetails is primary (has tackles); ESPN rosters are the fallback.
+const SOCCER = { // stat -> [FotMob playerStats key, ESPN roster stat key or null]
+  shots: ["total_shots", "totalShots"], sot: ["ShotsOnTarget", "shotsOnTarget"],
+  tackles: ["matchstats.headers.tackles", null], fouls_won: ["was_fouled", "foulsSuffered"],
+  fouls_committed: ["fouls", "foulsCommitted"], goals: ["goals", "totalGoals"], assists: ["assists", "goalAssists"],
+};
+const FM_API = "https://www.fotmob.com/api/data/";
 const TEAM_ALIAS = {LAK:"LA",SJS:"SJ",TBL:"TB",NJD:"NJ",CWS:"CHW",UTA:"UTAH",WAS:"WSH",AZ:"ARI",KCR:"KC",SDP:"SD",SFG:"SF",TBR:"TB"};
 const NICK = {"Maple Leafs": "Leafs", "Golden Knights": "Knights", "Blue Jackets": "Jackets", "Red Wings": "Wings"};
 const $ = (s) => document.querySelector(s);
@@ -16,17 +23,23 @@ const money = (x) => "$" + Number(x || 0).toFixed(2);
 const etTime = (d) => new Intl.DateTimeFormat("en-US", {timeZone: TZ, hour: "numeric", minute: "2-digit"}).format(d) + " ET";
 const espnTeam = (t) => TEAM_ALIAS[(t || "").toUpperCase()] || (t || "").toUpperCase();
 const nick = (n) => NICK[n] || n;
-const norm = (s) => (s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z]/g, "");
+const FOLD = {"ı": "i", "ł": "l", "Ł": "L", "ø": "o", "Ø": "O", "đ": "d", "Đ": "D", "ß": "ss", "æ": "ae"};
+const fold = (s) => (s || "").replace(/[ıłŁøØđĐßæ]/g, (c) => FOLD[c]);
+const norm = (s) => fold(s).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z]/g, "");
 const lastNorm = (s) => {
-  const p = (s || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "").split(/\s+/)
+  const p = fold(s).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").split(/\s+/)
     .filter((x) => x && !["jr", "sr", "ii", "iii", "iv"].includes(x.toLowerCase().replace(/\./g, "")));
   return p.length ? norm(p[p.length - 1]) : "";
 };
 
 let DATA = null, LIVE = {}, lastLiveOk = null, busy = false;
 
-async function getJSON(url) {
-  const r = await fetch(url, {cache: "no-store"});
+async function getJSON(url, ms = 15000) {
+  const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
+  const t = ac && setTimeout(() => ac.abort(), ms);
+  let r;
+  try { r = await fetch(url, ac ? {cache: "no-store", signal: ac.signal} : {cache: "no-store"}); }
+  finally { if (t) clearTimeout(t); }
   if (!r.ok) throw new Error(r.status + " " + url);
   return r.json();
 }
@@ -54,13 +67,36 @@ function parseGame(d, sport) {
       }
     }
   }
+  for (const r of d.rosters || []) { // soccer: ESPN puts player stats in rosters, not boxscore.players
+    const tab = r.team && r.team.abbreviation;
+    for (const a of r.roster || []) {
+      if (!a.athlete) continue;
+      const nm = a.athlete.displayName, g = {};
+      for (const x of a.stats || []) g[x.name] = Number(x.value) || 0;
+      people[norm(nm)] = {name: nm, team: tab, groups: {espn: g}, strs: {}, played: !!(a.starter || a.subbedIn)};
+    }
+  }
   for (const p of Object.values(people)) if (p.groups.pitching) p.pulled = lastP[p.team] !== norm(p.name);
   return {state, clock, away: t.away.team.abbreviation, home: t.home.team.abbreviation,
           away_score: t.away.score || "0", home_score: t.home.score || "0", people, sport};
 }
 
+const toks = (s) => fold(s).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z]+/).filter(Boolean);
+function findIn(ppl, player, team) {
+  if (!ppl) return null;
+  const n = norm(player);
+  if (ppl[n]) return ppl[n];
+  const want = toks(player), all = Object.values(ppl);
+  const sub = all.filter((p) => { const have = toks(p.name); return want.every((t) => have.includes(t)); });
+  if (sub.length === 1) return sub[0];
+  const ln = lastNorm(player);
+  const c = all.filter((p) => lastNorm(p.name) === ln && (!team || !p.team || p.team === espnTeam(team)));
+  return c.length === 1 ? c[0] : null;
+}
+
 function findPerson(g, player, team) {
   if (!g) return null;
+  if (g.sport === "soccer") return findIn(g.people, player, team);
   const ppl = g.people, n = norm(player);
   if (ppl[n]) return ppl[n];
   const ln = lastNorm(player);
@@ -84,8 +120,31 @@ function detail(p, stat, g) {
 }
 
 // Re-evaluate one leg against a live game; returns null to keep the server snapshot.
+function evalSoccer(leg, g) {
+  const [fk, ek] = SOCCER[leg.stat] || [null, null];
+  const team = leg.sheet_team || leg.team;
+  const fp = g.fm ? findIn(g.fm.people, leg.player, team) : null;
+  const ep = findIn(g.people, leg.player, team);
+  const started = g.state === "in" || g.state === "post";
+  let val = null, src = "";
+  if (fp && fk) { val = Number(fp.stats[fk]) || 0; src = "FotMob"; }
+  else if (ep && ek) { val = Math.round(ep.groups.espn[ek] || 0); src = "ESPN"; }
+  const found = !!(fp || ep);
+  let status, note = "";
+  if (!started) { status = "PENDING"; val = val || 0; }
+  else if (val === null) {
+    status = g.state === "post" ? "VOID?" : "LIVE";
+    note = !found ? "not in lineup data yet" : "n/a live";
+  } else if (val >= leg.target) status = "HIT";
+  else if (g.state === "post") status = (ep && ep.played === false && !fp) ? "VOID?" : "MISS";
+  else status = "LIVE";
+  if (started && val !== null && found && ep && ep.played === false && !fp) note = "on bench";
+  return {...leg, value: val === null ? "n/a" : val, status, note, src, team: ep ? ep.team : leg.team};
+}
+
 function evalLeg(leg, g) {
   if (!g) return null;
+  if (g.sport === "soccer" || SOCCER[leg.stat] && !STATS[leg.stat]) return evalSoccer(leg, g);
   const p = findPerson(g, leg.player, leg.sheet_team || leg.team);
   const val = p && (g.state === "in" || g.state === "post") ? statValue(p, leg.stat) : 0;
   let status;
@@ -122,7 +181,7 @@ function gameInfo(key) {
   return {...s, ...Object.fromEntries(Object.entries(l).filter(([k]) => k !== "people"))};
 }
 
-const ABBR = {sog: "SOG", receptions: "REC", pass_tds: "TD", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
+const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "TD", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
 const COLLAPSE_KEY = "betslip-collapsed";
 let collapsed = {};
 try { collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}"); } catch (e) { collapsed = {}; }
@@ -143,14 +202,15 @@ function gameHead(key) {
 
 function legHTML(l) {
   const cls = {"VOID?": "VOID", "NOT FOUND": "NF"}[l.status] || l.status;
-  const frac = l.target ? Math.min(l.value / l.target, 1) : 1;
-  const stat = l.stat === "k" ? `K o${l.line ?? l.target - 0.5}` : (ABBR[l.stat] || "SOG");
+  const na = typeof l.value !== "number";
+  const frac = na ? 0 : l.target ? Math.min(l.value / l.target, 1) : 1;
+  const stat = l.stat === "k" ? `K o${l.line ?? l.target - 0.5}` : (ABBR[l.stat] || String(l.stat || "SOG").toUpperCase());
   const tm = espnTeam(l.team || l.sheet_team);
   const note = l.note && !["on roster", "in lineup"].includes(l.note) ? `<span class="nt">${esc(l.note)}</span>` : "";
   const title = `${l.player} (${tm}) ${stat} ${l.value}/${l.target} ${l.status}`;
   return `<div class="leg ${cls}" title="${esc(title)}"><span class="dot"></span>` +
     `<span class="nm">${esc(l.player)} <span class="tm">(${esc(tm)})</span><span class="st">${esc(stat)}</span>${note}</span>` +
-    `<span class="v">${l.value}<span class="tg">/${l.target}</span></span>` +
+    `<span class="v">${na ? "–" : l.value}<span class="tg">/${l.target}</span></span>` +
     `<span class="bar"><i style="width:${(frac * 100).toFixed(1)}%"></i></span></div>`;
 }
 
@@ -198,7 +258,7 @@ function render() {
     </article>`;
   }).join("");
   const ex = (DATA.excluded || []).length ? "Not shown (not live bets): " + DATA.excluded.map(esc).join("; ") + "<br>" : "";
-  $("#foot").innerHTML = `<div class="legend"><span style="--c:var(--green)">hit</span><span style="--c:var(--amber)">live</span><span style="--c:var(--red)">lost</span><span style="--c:var(--grey)">not started</span></div>${ex}FanDuel · stats from ESPN box scores. LOST = game over (or pitcher pulled) short of target. Tap a bet to collapse/expand.<br>Data file generated ${esc(DATA.generated_et || "")}.`;
+  $("#foot").innerHTML = `<div class="legend"><span style="--c:var(--green)">hit</span><span style="--c:var(--amber)">live</span><span style="--c:var(--red)">lost</span><span style="--c:var(--grey)">not started</span></div>${ex}${esc(DATA.bets[0] && DATA.bets[0].book || "FanDuel")} · stats from ${Object.values(DATA.games).some((g) => g.sport === "soccer") ? "FotMob (primary) + ESPN" : "ESPN box scores"}. LOST = game over (or pitcher pulled) short of target. Tap a bet to collapse/expand.<br>Data file generated ${esc(DATA.generated_et || "")}.`;
   document.documentElement.style.setProperty("--hdr", $("header").offsetHeight + "px");
 }
 
@@ -213,6 +273,38 @@ document.addEventListener("click", (e) => {
   try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(collapsed)); } catch (err) { /* private mode */ }
 });
 
+// FotMob (CORS-open JSON). Match id comes from bets.json (fotmob_id) or is looked up by date + team names.
+const FM_IDS = {};
+async function fotmobId(k, g) {
+  if (g.fotmob_id) return g.fotmob_id;
+  if (FM_IDS[k]) return FM_IDS[k];
+  const day = (g.start_utc ? new Date(g.start_utc) : new Date());
+  const ymd = new Intl.DateTimeFormat("en-CA", {timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit"}).format(day).replace(/-/g, "");
+  const d = await getJSON(`${FM_API}matches?date=${ymd}&timezone=${encodeURIComponent(TZ)}`);
+  const hn = norm(g.home_full || g.home_name), an = norm(g.away_full || g.away_name);
+  const same = (a, b) => a && b && (a === b || a.startsWith(b) || b.startsWith(a) || (a.slice(0, 4) === b.slice(0, 4)));
+  for (const lg of d.leagues || []) for (const m of lg.matches || [])
+    if (same(norm(m.home.name), hn) && same(norm(m.away.name), an)) return (FM_IDS[k] = m.id);
+  throw new Error("fotmob match not found");
+}
+
+async function fotmobGame(k, g) {
+  const id = await fotmobId(k, g);
+  const d = await getJSON(`${FM_API}matchDetails?matchId=${id}&_=${Date.now()}`);
+  const people = {};
+  for (const p of Object.values((d.content && d.content.playerStats) || {})) {
+    const st = {};
+    for (const sec of p.stats || []) for (const v of Object.values(sec.stats || {})) if (v.key && v.stat) st[v.key] = v.stat.value;
+    people[norm(p.name)] = {name: p.name, team: null, stats: st};
+  }
+  const h = d.header || {}, s = h.status || {}, tm = h.teams || [];
+  const state = s.finished ? "post" : s.started ? "in" : "pre";
+  const lt = ((s.liveTime && s.liveTime.short) || "").replace(/[\u200e\u200f]/g, "");
+  const head = {state, clock: state === "post" ? "FT" : state === "in" ? lt : (g.start_et || ""),
+    home_score: String(tm[0] ? tm[0].score ?? 0 : 0), away_score: String(tm[1] ? tm[1].score ?? 0 : 0)};
+  return {id, people, head};
+}
+
 async function refresh() {
   if (busy) return; busy = true;
   $("#refresh").classList.add("spin");
@@ -222,8 +314,15 @@ async function refresh() {
     const keys = Object.keys(DATA.games);
     const res = await Promise.allSettled(keys.map(async (k) => {
       const g = DATA.games[k];
-      if (!g.summary_url) throw new Error("no url");
-      return [k, parseGame(await getJSON(g.summary_url + (g.summary_url.includes("?") ? "&" : "?") + "_=" + Date.now()), g.sport)];
+      const [es, fm] = await Promise.allSettled([
+        g.summary_url ? getJSON(g.summary_url + (g.summary_url.includes("?") ? "&" : "?") + "_=" + Date.now()).then((d) => parseGame(d, g.sport)) : Promise.reject(new Error("no url")),
+        g.sport === "soccer" ? fotmobGame(k, g) : Promise.reject(new Error("n/a")),
+      ]);
+      if (es.status !== "fulfilled" && fm.status !== "fulfilled") throw es.reason;
+      const out = es.status === "fulfilled" ? es.value : {...fm.value.head, people: {}, sport: g.sport};
+      if (fm.status === "fulfilled") { out.fm = fm.value; if (!out.state || out.state === "pre") Object.assign(out, fm.value.head); }
+      else if (LIVE[k] && LIVE[k].fm) out.fm = LIVE[k].fm; // keep last good FotMob data on a blip
+      return [k, out];
     }));
     let ok = 0;
     for (const r of res) if (r.status === "fulfilled") { LIVE[r.value[0]] = r.value[1]; ok++; }
