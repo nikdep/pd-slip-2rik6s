@@ -1,0 +1,8 @@
+/* v10 mobile viewport containment and flexible card chips. */
+html,body{width:100%;max-width:100vw;overflow-x:hidden;overscroll-behavior-x:none;box-sizing:border-box}
+*,*::before,*::after{box-sizing:border-box}
+#top,main,#bets,.card{max-width:100%;min-width:0}
+#games{width:100%;max-width:100%;min-width:0;overflow-x:auto;overflow-y:hidden;display:flex;flex-wrap:nowrap;white-space:nowrap;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+#games .gchip{flex:0 0 auto;max-width:calc(100vw - 20px)}
+.card .chead,.card .chips{min-width:0;max-width:100%}.card .chips{display:flex;flex-wrap:wrap;align-items:center;gap:6px;overflow:hidden}.card .chips>.chip{min-width:0;max-width:100%;white-space:nowrap}.card .chips>.chip:first-child{flex:0 1 auto}.card .chips>.chip.pay{flex:0 1 auto}.card .chips>.boost-pill{flex:0 1 auto;min-width:0;max-width:calc(100% - 8px);font-size:0;padding-left:7px;padding-right:7px}.card .chips>.boost-pill::after{content:"⚡ +30%";font-size:10px}
+@media(max-width:390px){main{padding-left:8px;padding-right:8px}.card .chips{gap:4px}.card .chips>.chip{font-size:11px;padding-left:6px;padding-right:6px}.card .chips>.boost-pill::after{font-size:9px}.card .chips>.chip.pay{font-size:11px}}
