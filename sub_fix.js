@@ -1,0 +1,2 @@
+/* v8 wording/layout polish for substituted legs. */
+(()=>{function fix(){document.querySelectorAll('.leg .nm').forEach(n=>{const f=n.querySelector('.subfrom');if(!f)return;const s=f.querySelector('s');f.textContent='↳ for ';if(s)f.append(s);n.querySelectorAll('.swapmain .nt').forEach(x=>x.remove())})}new MutationObserver(fix).observe(document.body,{childList:true,subtree:true});fix();setInterval(fix,500)})();
