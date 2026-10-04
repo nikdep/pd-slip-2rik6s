@@ -9,7 +9,13 @@ const STATS = { // stat -> [box-score group or null, keys summed, word]
   hr: ["batting", ["homeRuns"], "home runs"], k: ["pitching", ["strikeouts"], "strikeouts"],
   rush_yds: ["rushing", ["rushingYards"], "rush yds"], rec_yds: ["receiving", ["receivingYards"], "rec yds"],
   rush_rec_yds: ["multi", [], "rush+rec yds"], anytime_td: ["multi", [], "TDs"],
+  pass_yds: ["passing", ["passingYards"], "pass yds"], blocks: [null, ["blockedShots"], "blocked shots"],
+  assists: [null, ["assists"], "assists"], pp_points: ["pp", ["ppPoints"], "PP points"],
 };
+// Same stat name, different box-score home per sport (NHL "hits" = skater hits, not MLB batting hits).
+const SPORT_STATS = {nhl: {hits: [null, ["hits"]], blocks: [null, ["blockedShots"]], assists: [null, ["assists"]],
+  goals: [null, ["goals"]], points: [null, ["goals", "assists"]], sog: [null, ["shotsTotal"]], saves: ["goalies", ["saves"]],
+  pp_points: ["pp", ["ppPoints"]]}};
 // NFL stats summed across ESPN box-score groups (rushing / receiving are separate groups)
 const MULTI = {rush_rec_yds: [["rushing", "rushingYards"], ["receiving", "receivingYards"]],
   anytime_td: [["rushing", "rushingTouchdowns"], ["receiving", "receivingTouchdowns"], ["kickReturns", "kickReturnTouchdowns"], ["puntReturns", "puntReturnTouchdowns"]]};
@@ -85,7 +91,18 @@ function parseGame(d, sport) {
       if (!a.athlete) continue;
       const nm = a.athlete.displayName, g = {};
       for (const x of a.stats || []) g[x.name] = Number(x.value) || 0;
-      people[norm(nm)] = {name: nm, team: tab, groups: {espn: g}, strs: {}, played: !!(a.starter || a.subbedIn)};
+      people[norm(nm)] = {name: nm, team: tab, groups: {espn: g}, strs: {}, played: !!(a.starter || a.subbedIn),
+        subbed_out: !!a.subbedOut, subbed_to: a.subbedOutFor && a.subbedOutFor.athlete ? a.subbedOutFor.athlete.displayName : null};
+    }
+  }
+  if (sport === "nhl") { // power-play points from scoring plays (box score has no PP G/A)
+    for (const p of Object.values(people)) p.groups.pp = {ppPoints: 0};
+    for (const pl of d.plays || []) {
+      if (!pl.scoringPlay || !pl.strength || pl.strength.abbreviation !== "power-play") continue;
+      for (const x of pl.participants || []) {
+        const p = x.athlete && people[norm(x.athlete.displayName)];
+        if (p && (x.type === "scorer" || x.type === "assister")) p.groups.pp.ppPoints += 1;
+      }
     }
   }
   for (const p of Object.values(people)) if (p.groups.pitching) p.pulled = lastP[p.team] !== norm(p.name);
@@ -116,9 +133,9 @@ function findPerson(g, player, team) {
   return c.length === 1 ? c[0] : null;
 }
 
-function statValue(p, stat) {
+function statValue(p, stat, sport) {
   if (MULTI[stat]) return Math.round(MULTI[stat].reduce((a, [g, k]) => a + ((p.groups[g] || {})[k] || 0), 0));
-  const [group, keys] = STATS[stat] || [null, ["shotsTotal"]];
+  const [group, keys] = (SPORT_STATS[sport] || {})[stat] || STATS[stat] || [null, ["shotsTotal"]];
   const grps = group ? (p.groups[group] ? [p.groups[group]] : []) : Object.values(p.groups);
   for (const g of grps) if (keys.every((k) => k in g)) return Math.round(keys.reduce((a, k) => a + g[k], 0));
   return 0;
@@ -144,23 +161,31 @@ function evalSoccer(leg, g) {
   if (fp && fk) { val = Number(fp.stats[fk]) || 0; src = "FotMob"; }
   else if (ep && ek) { val = Math.round(ep.groups.espn[ek] || 0); src = "ESPN"; }
   const found = !!(fp || ep);
+  let combo = "";
+  if (leg.subbed_from && val !== null) { // bet365 Sub On Play On (swap done server-side): original's stat carries over
+    const ofp = g.fm ? findIn(g.fm.people, leg.subbed_from, team) : null, oep = findIn(g.people, leg.subbed_from, team);
+    const ov = ofp && fk ? Number(ofp.stats[fk]) || 0 : (oep && ek ? Math.round(oep.groups.espn[ek] || 0) : 0);
+    combo = `${leg.subbed_from} ${ov} + ${leg.player} ${val}`; val += ov;
+  }
   let status, note = "";
   if (!started) { status = "PENDING"; val = val || 0; }
   else if (val === null) {
     status = g.state === "post" ? "VOID?" : "LIVE";
     note = !found ? "not in lineup data yet" : "n/a live";
   } else if (val >= leg.target) status = "HIT";
+  else if (ep && ep.subbed_out && leg.sub_protected !== true && !leg.subbed_from) { status = "MISS"; note = "subbed off before line"; }
   else if (g.state === "post") status = (ep && ep.played === false && !fp) ? "VOID?" : "MISS";
   else status = "LIVE";
   if (started && val !== null && found && ep && ep.played === false && !fp) note = "on bench";
-  return {...leg, value: val === null ? "n/a" : val, status, note, src, team: ep ? ep.team : leg.team};
+  return {...leg, value: val === null ? "n/a" : val, status, note: combo || note, src, team: ep ? ep.team : leg.team};
 }
 
 function evalLeg(leg, g) {
+  if (leg.stat === "manual") return {...leg, value: "–", status: ["HIT", "MISS", "VOID?"].includes(leg.manual_result) ? leg.manual_result : "MANUAL", note: "manual: grade by hand"};
   if (!g) return null;
   if (g.sport === "soccer" || SOCCER[leg.stat] && !STATS[leg.stat]) return evalSoccer(leg, g);
   const p = findPerson(g, leg.player, leg.sheet_team || leg.team);
-  const val = p && (g.state === "in" || g.state === "post") ? statValue(p, leg.stat) : 0;
+  const val = p && (g.state === "in" || g.state === "post") ? statValue(p, leg.stat, g.sport) : 0;
   let status;
   if (val >= leg.target) status = "HIT";
   else if (g.state === "post") status = p ? "MISS" : "VOID?";
@@ -195,7 +220,7 @@ function gameInfo(key) {
   return {...s, ...Object.fromEntries(Object.entries(l).filter(([k]) => k !== "people"))};
 }
 
-const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "PASS TD", rush_yds: "RUSH YDS", rec_yds: "REC YDS", rush_rec_yds: "RUSH+REC YDS", anytime_td: "ANYTIME TD", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
+const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "PASS TD", rush_yds: "RUSH YDS", rec_yds: "REC YDS", rush_rec_yds: "RUSH+REC YDS", anytime_td: "ANYTIME TD", pass_yds: "PASS YDS", blocks: "BLK", pp_points: "PPP", manual: "MANUAL", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
 const COLLAPSE_KEY = "betslip-collapsed";
 let collapsed = {};
 try { collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}"); } catch (e) { collapsed = {}; }
@@ -223,7 +248,7 @@ function legHTML(l) {
   const note = l.note && !["on roster", "in lineup"].includes(l.note) ? `<span class="nt">${esc(l.note)}</span>` : "";
   const title = `${l.player} (${tm}) ${stat} ${l.value}/${l.target} ${l.status}`;
   return `<div class="leg ${cls}" title="${esc(title)}"><span class="dot"></span>` +
-    `<span class="nm">${esc(l.player)} <span class="tm">(${esc(tm)})</span><span class="st">${esc(stat)}</span>${note}</span>` +
+    `<span class="nm">${esc(l.player)} ${tm ? `<span class="tm">(${esc(tm)})</span>` : ""}<span class="st">${esc(stat)}</span>${note}</span>` +
     `<span class="v">${na ? "–" : l.value}<span class="tg">/${l.target}</span></span>` +
     `<span class="bar"><i style="width:${(frac * 100).toFixed(1)}%"></i></span></div>`;
 }
