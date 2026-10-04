@@ -195,7 +195,7 @@ function gameInfo(key) {
   return {...s, ...Object.fromEntries(Object.entries(l).filter(([k]) => k !== "people"))};
 }
 
-const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "TD", rush_yds: "RUSH YDS", rec_yds: "REC YDS", rush_rec_yds: "R+R YDS", anytime_td: "ANY TD", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
+const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "PASS TD", rush_yds: "RUSH YDS", rec_yds: "REC YDS", rush_rec_yds: "RUSH+REC YDS", anytime_td: "ANYTIME TD", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
 const COLLAPSE_KEY = "betslip-collapsed";
 let collapsed = {};
 try { collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}"); } catch (e) { collapsed = {}; }
@@ -218,7 +218,7 @@ function legHTML(l) {
   const cls = {"VOID?": "VOID", "NOT FOUND": "NF"}[l.status] || l.status;
   const na = typeof l.value !== "number";
   const frac = na ? 0 : l.target ? Math.min(l.value / l.target, 1) : 1;
-  const stat = l.stat === "k" ? `K o${l.line ?? l.target - 0.5}` : (ABBR[l.stat] || String(l.stat || "SOG").toUpperCase());
+  const stat = l.stat === "k" ? `K o${l.line ?? l.target - 0.5}` : (l.unit || ABBR[l.stat] || (l.stat ? String(l.stat).replace(/_/g, " ").toUpperCase() : ((DATA.games[l.game] || {}).sport || "nhl") === "nhl" ? "SOG" : ""));
   const tm = espnTeam(l.team || l.sheet_team);
   const note = l.note && !["on roster", "in lineup"].includes(l.note) ? `<span class="nt">${esc(l.note)}</span>` : "";
   const title = `${l.player} (${tm}) ${stat} ${l.value}/${l.target} ${l.status}`;
