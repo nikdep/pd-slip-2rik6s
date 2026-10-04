@@ -31,7 +31,8 @@ main{padding:8px 8px 24px;max-width:720px;margin:0 auto}
 .card.lost{opacity:.75}
 .chead{display:block;width:100%;text-align:left;background:none;border:0;padding:8px 10px 7px 13px;cursor:pointer}
 .crow{display:flex;align-items:center;gap:8px}
-.ctitle{flex:1;min-width:0;font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ctitle{flex:1;min-width:0;font-size:16px;font-weight:800;line-height:1.22;white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;overflow:hidden}
+@media(max-width:430px){.ctitle{font-size:15px}}
 .pill{flex:0 0 auto;font-size:12px;font-weight:800;border-radius:999px;padding:3px 8px;color:#0b0b0b;background:var(--st);letter-spacing:.3px}
 .chev{flex:0 0 auto;color:var(--muted);font-size:13px;transition:transform .2s;width:14px;text-align:center}
 .card.collapsed .chev{transform:rotate(-90deg)}

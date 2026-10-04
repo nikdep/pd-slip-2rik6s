@@ -2,7 +2,7 @@
   progress every 30s from ESPN box scores (soccer: FotMob player stats first, ESPN fallback). */
 "use strict";
 const REFRESH_MS = 30000;
-const APP_VERSION = 16; // bets.json "app_version" above this -> reload once to pick up new app code
+const APP_VERSION = 17; // bets.json "app_version" above this -> reload once to pick up new app code
 const TZ = "America/Toronto";
 const STATS = { // stat -> [box-score group or null, keys summed, word]
   sog: [null, ["shotsTotal"], "shots"], saves: ["goalies", ["saves"], "saves"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
@@ -291,11 +291,14 @@ function render() {
     const games = [...new Set(b.legs.map((l) => l.game))];
     const body = games.map((gk) => gameHead(gk) + b.legs.filter((l) => l.game === gk).map(legHTML).join("")).join("");
     const bonus = b.bonus || Number(b.bonus_stake || 0) > 0;
+    const bpct = Number((b.boost && b.boost.pct) || ((b.title || "").match(/(\d+)%[^)]*boost|boost\s*(\d+)%/i) || []).slice(1).find(Boolean) || 0);
+    const boostChip = bpct > 0 ? `<span class="chip boost-pill">⚡ +${bpct}%</span>` : "";
+    const ttl = (b.title || b.id).replace(/\s*\([^)]*\bboost\b[^)]*\)/ig, "").replace(/\s*\b\d+%\s*(profit|parlay)?\s*boost\b/ig, "").trim() || b.id;
     const payChip = bonus ? `<span class="chip pay bonus-pay"><b>${wholeMoney(b.bonus_stake || b.stake)}</b> → <b>${money(b.payout)}</b></span>` : `<span class="chip pay">${money(b.stake)} → <b>${money(b.payout)}</b></span>`;
     return `<article class="card ${cls}${isCollapsed(b) ? " collapsed" : ""}" id="${esc(b.id.replace(/\s+/g, "-"))}" data-id="${esc(b.id)}">
       <button class="chead" aria-expanded="${!isCollapsed(b)}">
-        <div class="crow"><span class="chev">▼</span><span class="ctitle">${esc(b.title)}</span><span class="pill">${pill}</span></div>
-        <div class="chips"><span class="chip"><span class="h"><b>✓${b.hit}</b></span> <span class="l"><b>●${b.live}</b></span> <span class="x"><b>✗${b.lost}</b></span>${b.pending ? ` · ${b.pending} to go` : ""}</span><span class="chip"><b>${esc(b.odds)}</b></span>${payChip}</div>
+        <div class="crow"><span class="chev">▼</span><span class="ctitle" title="${esc(b.title)}">${esc(ttl)}</span><span class="pill">${pill}</span></div>
+        <div class="chips"><span class="chip"><span class="h"><b>✓${b.hit}</b></span> <span class="l"><b>●${b.live}</b></span> <span class="x"><b>✗${b.lost}</b></span>${b.pending ? ` · ${b.pending} to go` : ""}</span><span class="chip"><b>${esc(b.odds)}</b></span>${boostChip}${payChip}</div>
       </button>
       <div class="legs">${body}</div>
     </article>`;
