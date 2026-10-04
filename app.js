@@ -2,6 +2,7 @@
   progress every 30s from ESPN box scores (soccer: FotMob player stats first, ESPN fallback). */
 "use strict";
 const REFRESH_MS = 30000;
+const APP_VERSION = 15; // bets.json "app_version" above this -> reload once to pick up new app code
 const TZ = "America/Toronto";
 const STATS = { // stat -> [box-score group or null, keys summed, word]
   sog: [null, ["shotsTotal"], "shots"], saves: ["goalies", ["saves"], "saves"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
@@ -357,7 +358,7 @@ async function refresh() {
   try {
     const today = isoET();
     const dataURL = viewDate === today ? "bets.json?t=" + Date.now() : `days/${viewDate}.json?t=${Date.now()}`;
-    try { DATA = await getJSON(dataURL); }
+    try { DATA = await getJSON(dataURL); if (DATA && Number(DATA.app_version) > APP_VERSION) { try { const kk = "betslip-reload-" + DATA.app_version; if (!sessionStorage.getItem(kk)) { sessionStorage.setItem(kk, "1"); location.reload(); return; } } catch (_) {} } }
     catch (e) { if (viewDate === today && DATA) { /* keep last current-day data */ } else { DATA = emptyData(viewDate); LIVE = {}; render(); return; } }
     const openDay = DATA.bets.some((b) => b.status === "alive" || b.raw_status === "LIVE" || b.raw_status === "PENDING");
     if (viewDate !== today && !openDay) { LIVE = {}; render(); return; }
