@@ -7,7 +7,12 @@ const STATS = { // stat -> [box-score group or null, keys summed, word]
   sog: [null, ["shotsTotal"], "shots"], saves: ["goalies", ["saves"], "saves"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
   goals: [null, ["goals"], "goals"], hits: ["batting", ["hits"], "hits"],
   hr: ["batting", ["homeRuns"], "home runs"], k: ["pitching", ["strikeouts"], "strikeouts"],
+  rush_yds: ["rushing", ["rushingYards"], "rush yds"], rec_yds: ["receiving", ["receivingYards"], "rec yds"],
+  rush_rec_yds: ["multi", [], "rush+rec yds"], anytime_td: ["multi", [], "TDs"],
 };
+// NFL stats summed across ESPN box-score groups (rushing / receiving are separate groups)
+const MULTI = {rush_rec_yds: [["rushing", "rushingYards"], ["receiving", "receivingYards"]],
+  anytime_td: [["rushing", "rushingTouchdowns"], ["receiving", "receivingTouchdowns"], ["kickReturns", "kickReturnTouchdowns"], ["puntReturns", "puntReturnTouchdowns"]]};
 // Soccer player props: FotMob matchDetails is primary (has tackles); ESPN rosters are the fallback.
 const SOCCER = { // stat -> [FotMob playerStats key, ESPN roster stat key or null]
   shots: ["total_shots", "totalShots"], sot: ["ShotsOnTarget", "shotsOnTarget"],
@@ -112,6 +117,7 @@ function findPerson(g, player, team) {
 }
 
 function statValue(p, stat) {
+  if (MULTI[stat]) return Math.round(MULTI[stat].reduce((a, [g, k]) => a + ((p.groups[g] || {})[k] || 0), 0));
   const [group, keys] = STATS[stat] || [null, ["shotsTotal"]];
   const grps = group ? (p.groups[group] ? [p.groups[group]] : []) : Object.values(p.groups);
   for (const g of grps) if (keys.every((k) => k in g)) return Math.round(keys.reduce((a, k) => a + g[k], 0));
@@ -122,6 +128,7 @@ function detail(p, stat, g) {
   const s = p.strs;
   if (stat === "points" && "goals" in s) return `${s.goals || 0}G ${s.assists || 0}A`;
   if ((stat === "hits" || stat === "hr") && s["hits-atBats"] && g.state !== "pre") return s["hits-atBats"] + " at bat";
+  if ((stat === "rush_yds" || stat === "rush_rec_yds" || stat === "anytime_td") && g.state !== "pre") { const r = p.groups.rushing || {}, c = p.groups.receiving || {}; return `${r.rushingAttempts || 0} car ${r.rushingYards || 0} yds, ${c.receptions || 0} rec ${c.receivingYards || 0} yds`; }
   if (stat === "k" && g.state !== "pre") return `${s["fullInnings.partInnings"] || ""} IP` + (p.pulled ? " · pulled" : "");
   return "";
 }
@@ -188,7 +195,7 @@ function gameInfo(key) {
   return {...s, ...Object.fromEntries(Object.entries(l).filter(([k]) => k !== "people"))};
 }
 
-const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "TD", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
+const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "TD", rush_yds: "RUSH YDS", rec_yds: "REC YDS", rush_rec_yds: "R+R YDS", anytime_td: "ANY TD", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
 const COLLAPSE_KEY = "betslip-collapsed";
 let collapsed = {};
 try { collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}"); } catch (e) { collapsed = {}; }
