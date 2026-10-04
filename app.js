@@ -2,7 +2,7 @@
   progress every 30s from ESPN box scores (soccer: FotMob player stats first, ESPN fallback). */
 "use strict";
 const REFRESH_MS = 30000;
-const APP_VERSION = 15; // bets.json "app_version" above this -> reload once to pick up new app code
+const APP_VERSION = 16; // bets.json "app_version" above this -> reload once to pick up new app code
 const TZ = "America/Toronto";
 const STATS = { // stat -> [box-score group or null, keys summed, word]
   sog: [null, ["shotsTotal"], "shots"], saves: ["goalies", ["saves"], "saves"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
@@ -51,7 +51,7 @@ let viewDate = isoET(), DAY_INDEX = [];
 const dateLabel = (d) => new Date(d + "T12:00:00Z").toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric", timeZone: "UTC"});
 const shiftDate = (d, n) => { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + n); return x.toISOString().slice(0, 10); };
 const emptyData = (d) => ({version: 1, date: d, title: "Bet Tracker", generated_at: new Date().toISOString(), generated_et: etTime(new Date()), summary: {bets: 0, staked: 0, potential_payout: 0, live_payout: 0, alive: 0, won: 0, lost: 0}, games: {}, bets: [], excluded: []});
-function renderDayNav() { const el = $("#daynav"); if (!el) return; el.innerHTML = `<button data-day-shift="-1" aria-label="Previous day">‹</button><span class="daylabel">${esc(dateLabel(viewDate))}</span><button data-day-shift="1" aria-label="Next day">›</button><button data-day-today="1">Today</button>`; }
+function renderDayNav() { const el = $("#daynav"); if (!el) return; el.innerHTML = `<button data-day-shift="-1" aria-label="Previous day">‹</button><span class="daylabel">${esc(dateLabel(viewDate === isoET() && DATA && DATA.carryover_from ? DATA.carryover_from : viewDate))}</span><button data-day-shift="1" aria-label="Next day">›</button><button data-day-today="1">Today</button>`; }
 
 async function getJSON(url, ms = 15000) {
   const ac = typeof AbortController !== "undefined" ? new AbortController() : null;
