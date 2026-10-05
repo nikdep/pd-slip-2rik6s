@@ -1,0 +1,51 @@
+/* v18: pin ONLY the summary stat bubbles at the top; everything else scrolls normally.
+   Smooth-scroll pass: no backdrop-filter / filter on repeated or fixed layers (iOS repaints them every frame). */
+/* Sticky needs a non-scrolling ancestor chain: overflow-x:hidden on body made body a scroll container and broke sticky. */
+html{overflow-x:hidden!important}
+body{overflow-x:visible!important;overflow-x:clip!important;overflow-y:visible!important}
+/* Flatten the header so the bubble row can be sticky against the whole page (sticky only works inside its parent). */
+#top,#summary{display:contents!important}
+#top .toprow{display:flex;max-width:760px;margin:0 auto;padding:calc(var(--sat) + 13px) 16px 0}
+#title{font-size:34px!important;letter-spacing:-1px!important;transition:none!important}
+/* The pinned pane: the 3 bubbles (5 on past days). */
+#summary .summary,.summary{position:-webkit-sticky;position:sticky;top:var(--sat);z-index:40;display:flex;gap:6px;
+  margin:10px 0 0!important;padding:7px max(16px,calc(50% - 364px)) 8px!important;
+  background:linear-gradient(180deg,rgba(9,13,30,.97),rgba(9,13,30,.94))!important;
+  border:0!important;border-bottom:1px solid rgba(255,255,255,.10)!important;border-radius:0!important;
+  box-shadow:0 6px 16px rgba(0,0,0,.28)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+  transform:translateZ(0)}
+#summary .summary.historical,.summary.historical{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))}
+/* Status-bar cover so tickets never show above the pinned bubbles under the notch/Dynamic Island. */
+main::before{content:"";position:fixed;left:0;right:0;top:0;height:var(--sat);z-index:41;background:rgb(9,13,30);pointer-events:none}
+#summary .summary .stat,.stat{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;
+  background:linear-gradient(180deg,rgb(38,48,78),rgb(18,24,44))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)!important;
+  border-radius:18px!important;padding:5px 10px!important;overflow:hidden}
+#summary .summary .stat::before,#summary .summary .stat::after{clip-path:none!important}
+.counts,.bonus-note,#games,#daynav{max-width:760px;margin-left:auto!important;margin-right:auto!important}
+.counts{padding:6px 16px 0;margin-top:0!important}
+#games{padding:0 16px;margin-top:9px!important;width:auto!important}
+/* Date bar: back in normal flow, scrolls away with the page. */
+.daynav,#daynav{position:static!important;top:auto!important;bottom:auto!important;left:auto!important;right:auto!important;
+  margin-top:10px!important;width:calc(100% - 32px)!important;max-width:728px!important;
+  background:linear-gradient(180deg,rgb(34,42,68),rgb(18,24,44))!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+#calendar{position:fixed}
+/* Kill the old scroll-collapse (it hid the bubbles and resized the title mid-scroll = jank). */
+.scrolled #summary{display:contents!important}
+.scrolled #games{display:flex!important}
+.scrolled #top{padding:0!important}
+/* Opaque gradients instead of blur on everything repeated. */
+.card{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:linear-gradient(180deg,rgb(29,35,56),rgb(15,19,34))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.16),0 6px 14px rgba(0,0,0,.22)!important}
+.gchip{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:linear-gradient(180deg,rgb(44,52,80),rgb(26,32,54))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.22)!important}
+#refresh,.calbutton,.daylabel,.daynav button{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+#refresh{background:linear-gradient(180deg,rgb(52,60,88),rgb(30,36,58))!important}
+#calendar{backdrop-filter:none!important;-webkit-backdrop-filter:none!important;background:linear-gradient(180deg,rgb(38,45,68),rgb(12,16,30))!important}
+body::after{filter:none!important}
+#games{-webkit-mask-image:none!important;mask-image:none!important}
+@media(max-width:430px){
+  #top .toprow{padding-left:10px;padding-right:10px}
+  #summary .summary,.summary{padding-left:10px!important;padding-right:10px!important}
+  .counts{padding-left:10px;padding-right:10px}
+  #games{padding:0 10px}
+  .daynav,#daynav{width:calc(100% - 20px)!important}
+  main{padding-left:10px;padding-right:10px}
+}
