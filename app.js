@@ -285,6 +285,14 @@ function render() {
     const cl = g.state === "pre" ? startET(g) : g.clock;
     return `<div class="gchip ${esc(g.state)}">${esc(g.away)} @ ${esc(g.home)}${sc}<span class="cl">${esc(cl)}</span></div>`;
   }).join("");
+  const bookBadge = (raw) => {
+    const n = String(raw || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!n) return "";
+    const m = /^(fd|fanduel)/.test(n) ? ["FD", "fd", "FanDuel"] : /^(dk|draftkings)/.test(n) ? ["DK", "dk", "DraftKings"]
+      : /^(bet365|365)/.test(n) ? ["365", "b365", "bet365"] : /^betano|^btn/.test(n) ? ["BTN", "btn", "Betano"]
+      : /^(thescore|score|ts$|espnbet|espn)/.test(n) ? ["TS", "ts", "theScore Bet"] : [String(raw).trim().slice(0, 4).toUpperCase(), "other", String(raw).trim()];
+    return `<span class="book book-${m[1]}" title="${esc(m[2])}" aria-label="${esc(m[2])}">${esc(m[0])}</span>`;
+  };
   $("#bets").innerHTML = sorted.length ? sorted.map((b) => {
     const cls = b.status === "alive" && !b.anyStarted ? "pending" : b.status;
     const pill = {alive: b.anyStarted ? "ALIVE" : "NOT STARTED", won: "WON", lost: "LOST"}[b.status];
@@ -297,14 +305,14 @@ function render() {
     const payChip = bonus ? `<span class="chip pay bonus-pay"><b>${wholeMoney(b.bonus_stake || b.stake)}</b> → <b>${money(b.payout)}</b></span>` : `<span class="chip pay">${money(b.stake)} → <b>${money(b.payout)}</b></span>`;
     return `<article class="card ${cls}${isCollapsed(b) ? " collapsed" : ""}" id="${esc(b.id.replace(/\s+/g, "-"))}" data-id="${esc(b.id)}">
       <button class="chead" aria-expanded="${!isCollapsed(b)}">
-        <div class="crow"><span class="chev">▼</span><span class="ctitle" title="${esc(b.title)}">${esc(ttl)}</span><span class="pill">${pill}</span></div>
+        <div class="crow"><span class="chev">▼</span><span class="ctitle" title="${esc(b.title)}">${esc(ttl)}</span>${bookBadge(b.book)}<span class="pill">${pill}</span></div>
         <div class="chips"><span class="chip"><span class="h"><b>✓${b.hit}</b></span> <span class="l"><b>●${b.live}</b></span> <span class="x"><b>✗${b.lost}</b></span>${b.pending ? ` · ${b.pending} to go` : ""}</span><span class="chip"><b>${esc(b.odds)}</b></span>${boostChip}${payChip}</div>
       </button>
       <div class="legs">${body}</div>
     </article>`;
   }).join("") : `<div class="empty">No bets this day</div>`;
   const ex = (DATA.excluded || []).length ? "Not shown (not live bets): " + DATA.excluded.map(esc).join("; ") + "<br>" : "";
-  $("#foot").innerHTML = `<div class="legend"><span style="--c:var(--green)">hit</span><span style="--c:var(--amber)">live</span><span style="--c:var(--red)">lost</span><span style="--c:var(--grey)">not started</span></div>${ex}${esc(DATA.bets[0] && DATA.bets[0].book || "FanDuel")} · stats from ${Object.values(DATA.games).some((g) => g.sport === "soccer") ? "FotMob (primary) + ESPN" : "ESPN box scores"}. LOST = game over (or pitcher pulled) short of target. Tap a bet to collapse/expand.<br>Data file generated ${esc(DATA.generated_et || "")}.`;
+  $("#foot").innerHTML = `<div class="legend"><span style="--c:var(--green)">hit</span><span style="--c:var(--amber)">live</span><span style="--c:var(--red)">lost</span><span style="--c:var(--grey)">not started</span></div>${ex}${esc([...new Set(DATA.bets.map((x) => String(x.book || "").replace(/\s+Ontario$/i, "")).filter(Boolean))].join(", ") || "FanDuel")} · stats from ${Object.values(DATA.games).some((g) => g.sport === "soccer") ? "FotMob (primary) + ESPN" : "ESPN box scores"}. LOST = game over (or pitcher pulled) short of target. Tap a bet to collapse/expand.<br>Data file generated ${esc(DATA.generated_et || "")}.`;
   document.documentElement.style.setProperty("--hdr", $("header").offsetHeight + "px");
 }
 
