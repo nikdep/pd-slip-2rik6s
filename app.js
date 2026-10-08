@@ -301,7 +301,7 @@ function render() {
     const bonus = b.bonus || Number(b.bonus_stake || 0) > 0;
     const isNet = !!(b.boost && b.boost.type === "safety_net");
     const bpct = isNet ? 0 : Number((b.boost && b.boost.pct) || ((b.title || "").match(/(\d+)%[^)]*boost|boost\s*(\d+)%/i) || []).slice(1).find(Boolean) || 0);
-    const boostChip = isNet ? `<span class="chip boost-pill net-pill" style="background:rgba(46,160,67,.18);color:#3fb950;border-color:rgba(63,185,80,.45)">${esc(b.boost.label || ("🛡 $" + (b.boost.pct || "") + " SAFETY NET"))}</span>` : (bpct > 0 ? `<span class="chip boost-pill">⚡ +${bpct}%</span>` : "");
+    const boostChip = isNet ? `<span class="chip net-pill">🛡 $${esc(String(b.boost.pct || 10))} NET</span>` : (bpct > 0 ? `<span class="chip boost-pill">⚡ +${bpct}%</span>` : "");
     const ttl = (b.title || b.id).replace(/\s*\([^)]*\bboost\b[^)]*\)/ig, "").replace(/\s*\b\d+%\s*(profit|parlay)?\s*boost\b/ig, "").trim() || b.id;
     const payChip = bonus ? `<span class="chip pay bonus-pay"><b>${wholeMoney(b.bonus_stake || b.stake)}</b> → <b>${money(b.payout)}</b></span>` : `<span class="chip pay">${money(b.stake)} → <b>${money(b.payout)}</b></span>`;
     return `<article class="card ${cls}${isCollapsed(b) ? " collapsed" : ""}" id="${esc(b.id.replace(/\s+/g, "-"))}" data-id="${esc(b.id)}">
