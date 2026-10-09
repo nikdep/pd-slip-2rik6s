@@ -86,7 +86,7 @@ function parseGame(d, sport) {
       }
     }
   }
-  for (const r of d.rosters || []) { // soccer: ESPN puts player stats in rosters, not boxscore.players
+  if (sport === "soccer") for (const r of d.rosters || []) { // soccer only (MLB summaries also carry rosters and would wipe box-score stats): ESPN puts player stats in rosters, not boxscore.players
     const tab = r.team && r.team.abbreviation;
     for (const a of r.roster || []) {
       if (!a.athlete) continue;
