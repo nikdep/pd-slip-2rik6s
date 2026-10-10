@@ -86,7 +86,7 @@ function parseGame(d, sport) {
       }
     }
   }
-  if (sport === "soccer") for (const r of d.rosters || []) { // soccer only (MLB summaries also carry rosters and would wipe box-score stats): ESPN puts player stats in rosters, not boxscore.players
+  for (const r of d.rosters || []) { // soccer: ESPN puts player stats in rosters, not boxscore.players
     const tab = r.team && r.team.abbreviation;
     for (const a of r.roster || []) {
       if (!a.athlete) continue;
@@ -211,7 +211,7 @@ function recompute() {
     else if (sts.every((s) => s === "HIT" || s === "VOID?")) status = "won";
     else status = "alive";
     return {...b, legs, hit, live, lost, pending: legs.length - hit - live - lost, status,
-            anyStarted: sts.some((s) => s !== "PENDING" && s !== "MANUAL") || legs.some((l) => l.status === "MANUAL" && LIVE[l.game] && LIVE[l.game].state !== "pre")};
+            anyStarted: sts.some((s) => s !== "PENDING")};
   });
   return bets;
 }
