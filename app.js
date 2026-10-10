@@ -115,7 +115,7 @@ function parseGame(d, sport) {
 }
 
 // ---- Soccer team / match / period markets (STAT_TYPES.md) ----
-const TEAM_STATS = new Set(["team_corners", "match_corners", "team_goals", "match_goals", "btts"]);
+const TEAM_STATS = new Set(["team_sot", "team_shots", "team_corners", "match_corners", "team_goals", "match_goals", "btts"]);
 const HALF_STATS = {sot_1h: "sot", shots_1h: "shots"}; // player first-half props
 // ESPN summary -> team corners/SOT, period, and per-player first-half shots from commentary.
 function espnSoccerTeam(d, comp, t) {
@@ -139,7 +139,7 @@ function espnSoccerTeam(d, comp, t) {
       shots1h[nm] = (shots1h[nm] || 0) + 1; if (on) sot1h[nm] = (sot1h[nm] || 0) + 1;
     }
   }
-  return {corners, ht, sot1h, shots1h, sot: bt.home ? {home: bt.home.shotsOnTarget, away: bt.away.shotsOnTarget} : null};
+  return {corners, ht, sot1h, shots1h, sot: bt.home ? {home: bt.home.shotsOnTarget, away: bt.away.shotsOnTarget} : null, shots: bt.home ? {home: bt.home.totalShots, away: bt.away.totalShots} : null};
 }
 function legSide(leg, g, key) {
   if (leg.side === "home" || leg.side === "away") return leg.side;
@@ -168,6 +168,12 @@ function evalTeamLeg(leg, g) {
   if (leg.stat === "match_goals" || leg.stat === "team_goals") {
     if (leg.stat === "team_goals" && !side) return {...leg, value: "n/a", status: "LIVE", note: "team not matched"};
     const val = leg.stat === "match_goals" ? hs + as : side === "home" ? hs : as;
+    return {...leg, value: val, status: overUnder(leg, g, val), note: score, src: "ESPN"};
+  }
+  if (leg.stat === "team_sot" || leg.stat === "team_shots") {
+    const t = g.team && (leg.stat === "team_sot" ? g.team.sot : g.team.shots);
+    if (!t || !side) return {...leg, value: "n/a", status: "LIVE", note: side ? "stats not posted yet" : "team not matched"};
+    const val = Number(t[side]) || 0;
     return {...leg, value: val, status: overUnder(leg, g, val), note: score, src: "ESPN"};
   }
   // corners: ESPN boxscore wonCorners primary, FotMob stats fallback
@@ -325,7 +331,7 @@ function gameInfo(key) {
   return {...s, ...Object.fromEntries(Object.entries(l).filter(([k]) => k !== "people"))};
 }
 
-const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "PASS TD", rush_yds: "RUSH YDS", rec_yds: "REC YDS", rush_rec_yds: "RUSH+REC YDS", anytime_td: "ANYTIME TD", pass_yds: "PASS YDS", blocks: "BLK", pp_points: "PPP", manual: "MANUAL", team_corners: "CORNERS", match_corners: "MATCH CORNERS", team_goals: "TEAM GOALS", match_goals: "MATCH GOALS", btts: "BTTS", sot_1h: "1H SOT", shots_1h: "1H SHOTS", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
+const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "PASS TD", rush_yds: "RUSH YDS", rec_yds: "REC YDS", rush_rec_yds: "RUSH+REC YDS", anytime_td: "ANYTIME TD", pass_yds: "PASS YDS", blocks: "BLK", pp_points: "PPP", manual: "MANUAL", team_corners: "CORNERS", team_sot: "TEAM SOT", team_shots: "TEAM SHOTS", match_corners: "MATCH CORNERS", team_goals: "TEAM GOALS", match_goals: "MATCH GOALS", btts: "BTTS", sot_1h: "1H SOT", shots_1h: "1H SHOTS", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
 const COLLAPSE_KEY = "betslip-collapsed";
 let collapsed = {};
 try { collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}"); } catch (e) { collapsed = {}; }
