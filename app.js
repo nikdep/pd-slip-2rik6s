@@ -2,7 +2,7 @@
   progress every 30s from ESPN box scores (soccer: FotMob player stats first, ESPN fallback). */
 "use strict";
 const REFRESH_MS = 30000;
-const APP_VERSION = 24; // bets.json "app_version" above this -> reload once to pick up new app code
+const APP_VERSION = 27; // bets.json "app_version" above this -> reload once to pick up new app code
 const TZ = "America/Toronto";
 const STATS = { // stat -> [box-score group or null, keys summed, word]
   sog: [null, ["shotsTotal"], "shots"], saves: ["goalies", ["saves"], "saves"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
@@ -108,9 +108,105 @@ function parseGame(d, sport) {
       }
     }
   }
+  const team = sport === "soccer" ? espnSoccerTeam(d, comp, t) : null;
   for (const p of Object.values(people)) if (p.groups.pitching) p.pulled = lastP[p.team] !== norm(p.name);
   return {state, clock, away: t.away.team.abbreviation, home: t.home.team.abbreviation,
-          away_score: t.away.score || "0", home_score: t.home.score || "0", people, sport};
+          away_score: t.away.score || "0", home_score: t.home.score || "0", people, sport, team};
+}
+
+// ---- Soccer team / match / period markets (STAT_TYPES.md) ----
+const TEAM_STATS = new Set(["team_corners", "match_corners", "team_goals", "match_goals", "btts"]);
+const HALF_STATS = {sot_1h: "sot", shots_1h: "shots"}; // player first-half props
+// ESPN summary -> team corners/SOT, period, and per-player first-half shots from commentary.
+function espnSoccerTeam(d, comp, t) {
+  const bt = {};
+  for (const x of (d.boxscore && d.boxscore.teams) || []) {
+    const side = x.homeAway || (x.team.abbreviation === t.home.team.abbreviation ? "home" : "away"), st = {};
+    for (const s of x.statistics || []) st[s.name] = Number(s.displayValue);
+    bt[side] = st;
+  }
+  const corners = bt.home && bt.away && "wonCorners" in bt.home ? {home: bt.home.wonCorners || 0, away: bt.away.wonCorners || 0} : null;
+  const period = Number(comp.status.period) || 0, ev = (d.keyEvents || []).concat(d.commentary || []);
+  const ht = comp.status.type.state === "post" || period >= 2 || ev.some((e) => /halftime|first half ends/i.test((e.type && e.type.text) || "") || /^First Half ends/i.test(e.text || ""));
+  const sot1h = {}, shots1h = {};
+  for (const c of d.commentary || []) { // ESPN text: "Attempt saved. NAME (Team) ..." / "Goal! ... NAME (Team) ..." / "Attempt missed|blocked."
+    const tx = c.text || "", m = /^(\d+)'/.exec((c.time && c.time.displayValue) || "");
+    if (!m || Number(m[1]) > 45 || (c.period && c.period.number > 1) || /second half/i.test(tx)) continue;
+    let mm;
+    if ((mm = /^Attempt (saved|missed|blocked)\. (.+?) \(/.exec(tx)) || (mm = /^Goal! .*?\. (.+?) \(/.exec(tx))) {
+      const nm = norm(mm[2] || mm[1]), on = !mm[2] || mm[1] === "saved";
+      if (/own goal/i.test(tx)) continue;
+      shots1h[nm] = (shots1h[nm] || 0) + 1; if (on) sot1h[nm] = (sot1h[nm] || 0) + 1;
+    }
+  }
+  return {corners, ht, sot1h, shots1h, sot: bt.home ? {home: bt.home.shotsOnTarget, away: bt.away.shotsOnTarget} : null};
+}
+function legSide(leg, g, key) {
+  if (leg.side === "home" || leg.side === "away") return leg.side;
+  const tm = espnTeam(leg.team || leg.sheet_team);
+  if (tm && tm === g.home) return "home";
+  if (tm && tm === g.away) return "away";
+  const [a, h] = String(key || leg.game || "").split("@");
+  if (tm && tm === a) return "away"; if (tm && tm === h) return "home";
+  return null;
+}
+// over lines HIT as soon as reached, MISS at FT; under lines (leg.under) MISS when passed, HIT at FT
+function overUnder(leg, g, val) {
+  if (leg.under) return val > (leg.line ?? leg.target - 0.5) ? "MISS" : g.state === "post" ? "HIT" : "LIVE";
+  return val >= leg.target ? "HIT" : g.state === "post" ? "MISS" : "LIVE";
+}
+function evalTeamLeg(leg, g) {
+  const started = g.state === "in" || g.state === "post";
+  const hs = Number(g.home_score) || 0, as = Number(g.away_score) || 0, score = `${g.away}${g.away ? " " : ""}${as}-${hs}${g.home ? " " + g.home : ""}`;
+  if (!started) return {...leg, value: 0, status: "PENDING", note: ""};
+  const side = legSide(leg, g);
+  if (leg.stat === "btts") {
+    const n = (hs > 0) + (as > 0), yes = leg.pick !== "no";
+    const status = yes ? (n === 2 ? "HIT" : g.state === "post" ? "MISS" : "LIVE") : (n === 2 ? "MISS" : g.state === "post" ? "HIT" : "LIVE");
+    return {...leg, value: n, target: 2, disp: `${as}-${hs}`, disp_tg: yes ? " BTTS" : " no BTTS", status, note: score, src: "ESPN"};
+  }
+  if (leg.stat === "match_goals" || leg.stat === "team_goals") {
+    if (leg.stat === "team_goals" && !side) return {...leg, value: "n/a", status: "LIVE", note: "team not matched"};
+    const val = leg.stat === "match_goals" ? hs + as : side === "home" ? hs : as;
+    return {...leg, value: val, status: overUnder(leg, g, val), note: score, src: "ESPN"};
+  }
+  // corners: ESPN boxscore wonCorners primary, FotMob stats fallback
+  let c = g.team && g.team.corners, src = "ESPN";
+  if (!c && g.fm && g.fm.corners) { c = g.fm.corners; src = "FotMob"; }
+  if (!c) return {...leg, value: "n/a", status: g.state === "post" ? "VOID?" : "LIVE", note: "corners not posted yet"};
+  if (leg.stat === "team_corners" && !side) return {...leg, value: "n/a", status: "LIVE", note: "team not matched"};
+  const val = leg.stat === "match_corners" ? c.home + c.away : c[side];
+  return {...leg, value: val, status: overUnder(leg, g, val), note: `corners ${g.away} ${c.away}-${c.home} ${g.home}`, src};
+}
+// First-half player props: FotMob shotmap (period FirstHalf; on target = isOnTarget, not blocked) primary, ESPN commentary fallback.
+function evalHalfLeg(leg, g) {
+  const base = HALF_STATS[leg.stat], team = leg.sheet_team || leg.team;
+  const started = g.state === "in" || g.state === "post";
+  if (!started) return {...leg, value: 0, status: "PENDING", note: ""};
+  const ht = !!((g.team && g.team.ht) || (g.fm && g.fm.ht));
+  let val = null, src = "";
+  if (g.fm && g.fm.shots) {
+    const fp = findIn(g.fm.people, leg.player, team) || findIn(g.fm.shooters || {}, leg.player, team);
+    const nm = fp ? norm(fp.name) : null;
+    if (fp || Object.keys(g.fm.people || {}).length) {
+      val = g.fm.shots.filter((x) => x.period === "FirstHalf" && !x.isOwnGoal && nm && norm(x.playerName) === nm &&
+        (base === "shots" || (x.isOnTarget && (!x.isBlocked || x.eventType === "Goal")))).length;
+      if (fp) src = "FotMob";
+      else val = null;
+    }
+  }
+  const ep = findIn(g.people, leg.player, team);
+  if (val === null && g.team) {
+    const tbl = base === "shots" ? g.team.shots1h : g.team.sot1h, k = ep ? norm(ep.name) : norm(leg.player);
+    val = tbl[k] || 0; src = "ESPN";
+  }
+  if (val === null) val = 0;
+  let status, note = (ht ? "1st half final" : "1st half") + (src ? " · " + src : "");
+  if (val >= leg.target) status = "HIT";
+  else if (ht) { status = ep && ep.played === false ? "VOID?" : "MISS"; if (status === "VOID?") note = "did not play 1st half"; }
+  else if (ep && ep.subbed_out && leg.sub_protected !== true) { status = "MISS"; note = "subbed off in 1st half"; }
+  else status = "LIVE";
+  return {...leg, value: val, status, note, src, team: ep ? ep.team : leg.team};
 }
 
 const toks = (s) => fold(s).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().split(/[^a-z]+/).filter(Boolean);
@@ -190,6 +286,8 @@ function evalLeg(leg, g) {
     return {...leg, value: "–", status: started ? "MANUAL" : "PENDING", note: started ? "in play" : ""};
   }
   if (!g) return null;
+  if (TEAM_STATS.has(leg.stat)) return evalTeamLeg(leg, g);
+  if (HALF_STATS[leg.stat]) return evalHalfLeg(leg, g);
   if (g.sport === "soccer" || SOCCER[leg.stat] && !STATS[leg.stat]) return evalSoccer(leg, g);
   const p = findPerson(g, leg.player, leg.sheet_team || leg.team);
   const val = p && (g.state === "in" || g.state === "post") ? statValue(p, leg.stat, g.sport) : 0;
@@ -227,7 +325,7 @@ function gameInfo(key) {
   return {...s, ...Object.fromEntries(Object.entries(l).filter(([k]) => k !== "people"))};
 }
 
-const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "PASS TD", rush_yds: "RUSH YDS", rec_yds: "REC YDS", rush_rec_yds: "RUSH+REC YDS", anytime_td: "ANYTIME TD", pass_yds: "PASS YDS", blocks: "BLK", pp_points: "PPP", manual: "MANUAL", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
+const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "PASS TD", rush_yds: "RUSH YDS", rec_yds: "REC YDS", rush_rec_yds: "RUSH+REC YDS", anytime_td: "ANYTIME TD", pass_yds: "PASS YDS", blocks: "BLK", pp_points: "PPP", manual: "MANUAL", team_corners: "CORNERS", match_corners: "MATCH CORNERS", team_goals: "TEAM GOALS", match_goals: "MATCH GOALS", btts: "BTTS", sot_1h: "1H SOT", shots_1h: "1H SHOTS", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
 const COLLAPSE_KEY = "betslip-collapsed";
 let collapsed = {};
 try { collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}"); } catch (e) { collapsed = {}; }
@@ -266,13 +364,13 @@ function legHTML(l, i) {
   const na = typeof l.value !== "number";
   const frac = na ? 0 : l.target ? Math.min(l.value / l.target, 1) : 1;
   const stat = l.stat === "manual" ? "" : l.stat === "k" ? `K o${l.line ?? l.target - 0.5}` : (l.unit || ABBR[l.stat] || (l.stat ? String(l.stat).replace(/_/g, " ").toUpperCase() : ((DATA.games[l.game] || {}).sport || "nhl") === "nhl" ? "SOG" : ""));
-  const tm = l.stat === "manual" ? "" : espnTeam(l.team || l.sheet_team);
+  const tm = l.stat === "manual" || ["match_corners", "match_goals", "btts"].includes(l.stat) ? "" : espnTeam(l.team || l.sheet_team);
   const note = l.note && !["on roster", "in lineup"].includes(l.note) ? `<span class="nt">${esc(l.note)}</span>` : "";
-  const who = l.stat === "manual" ? (l.label || l.player || "") : (l.player || l.label || "");
+  const who = l.stat === "manual" || TEAM_STATS.has(l.stat) ? (l.label || l.player || "") : (l.player || l.label || "");
   const title = `${who} (${tm}) ${stat} ${l.value}/${l.target} ${l.status}`;
   return `<div class="leg ${cls}" data-i="${i}" title="${esc(title)}"><span class="dot"></span>` +
     `<span class="nm">${esc(who)} ${tm ? `<span class="tm">(${esc(tm)})</span>` : ""}<span class="st">${esc(stat)}</span>${note}</span>` +
-    (l.stat === "manual" ? `<span class="v">${l.status === "HIT" ? "✓" : l.status === "MISS" ? "✗" : "–"}</span>` : `<span class="v">${na ? "–" : l.value}<span class="tg">/${l.target}</span></span>`) +
+    (l.stat === "manual" ? `<span class="v">${l.status === "HIT" ? "✓" : l.status === "MISS" ? "✗" : "–"}</span>` : `<span class="v">${l.disp != null ? esc(l.disp) : na ? "–" : l.value}<span class="tg">${l.disp_tg != null ? esc(l.disp_tg) : "/" + l.target}</span></span>`) +
     `<span class="bar"><i style="width:${(frac * 100).toFixed(1)}%"></i></span></div>`;
 }
 
@@ -378,12 +476,18 @@ async function fotmobGame(k, g) {
     for (const sec of p.stats || []) for (const v of Object.values(sec.stats || {})) if (v.key && v.stat) st[v.key] = v.stat.value;
     people[norm(p.name)] = {name: p.name, team: null, stats: st};
   }
+  const shots = (d.content && d.content.shotmap && d.content.shotmap.shots) || [], shooters = {};
+  for (const x of shots) shooters[norm(x.playerName)] = {name: x.playerName, team: null, stats: {}};
+  let corners = null;
+  for (const grp of (((d.content || {}).stats || {}).Periods || {}).All ? d.content.stats.Periods.All.stats : []) for (const it of grp.stats || [])
+    if (it.key === "corners" && Array.isArray(it.stats) && corners === null) corners = {home: Number(it.stats[0]) || 0, away: Number(it.stats[1]) || 0};
   const h = d.header || {}, s = h.status || {}, tm = h.teams || [];
   const state = s.finished ? "post" : s.started ? "in" : "pre";
   const lt = ((s.liveTime && s.liveTime.short) || "").replace(/[\u200e\u200f]/g, "");
   const head = {state, clock: state === "post" ? "FT" : state === "in" ? lt : (g.start_et || ""),
     home_score: String(tm[0] ? tm[0].score ?? 0 : 0), away_score: String(tm[1] ? tm[1].score ?? 0 : 0)};
-  return {id, people, head};
+  const fht = state === "post" || /^HT$/i.test(lt) || shots.some((x) => x.period === "SecondHalf") || (parseInt(lt) > 45 && !/\+/.test(lt));
+  return {id, people, head, shots, shooters, corners, ht: fht};
 }
 
 async function refresh() {
