@@ -266,9 +266,9 @@ function legHTML(l, i) {
   const na = typeof l.value !== "number";
   const frac = na ? 0 : l.target ? Math.min(l.value / l.target, 1) : 1;
   const stat = l.stat === "manual" ? "" : l.stat === "k" ? `K o${l.line ?? l.target - 0.5}` : (l.unit || ABBR[l.stat] || (l.stat ? String(l.stat).replace(/_/g, " ").toUpperCase() : ((DATA.games[l.game] || {}).sport || "nhl") === "nhl" ? "SOG" : ""));
-  const tm = espnTeam(l.team || l.sheet_team);
+  const tm = l.stat === "manual" ? "" : espnTeam(l.team || l.sheet_team);
   const note = l.note && !["on roster", "in lineup"].includes(l.note) ? `<span class="nt">${esc(l.note)}</span>` : "";
-  const who = l.player || l.label || "";
+  const who = l.stat === "manual" ? (l.label || l.player || "") : (l.player || l.label || "");
   const title = `${who} (${tm}) ${stat} ${l.value}/${l.target} ${l.status}`;
   return `<div class="leg ${cls}" data-i="${i}" title="${esc(title)}"><span class="dot"></span>` +
     `<span class="nm">${esc(who)} ${tm ? `<span class="tm">(${esc(tm)})</span>` : ""}<span class="st">${esc(stat)}</span>${note}</span>` +
