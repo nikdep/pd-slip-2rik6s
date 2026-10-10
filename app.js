@@ -2,7 +2,7 @@
   progress every 30s from ESPN box scores (soccer: FotMob player stats first, ESPN fallback). */
 "use strict";
 const REFRESH_MS = 30000;
-const APP_VERSION = 17; // bets.json "app_version" above this -> reload once to pick up new app code
+const APP_VERSION = 24; // bets.json "app_version" above this -> reload once to pick up new app code
 const TZ = "America/Toronto";
 const STATS = { // stat -> [box-score group or null, keys summed, word]
   sog: [null, ["shotsTotal"], "shots"], saves: ["goalies", ["saves"], "saves"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
@@ -63,6 +63,8 @@ async function getJSON(url, ms = 15000) {
   return r.json();
 }
 
+// ESPN soccer rosters send subbedIn/subbedOut as {didSub: false} before kickoff and as booleans once live.
+const didSub = (x) => (x && typeof x === "object") ? x.didSub === true : !!x;
 function parseGame(d, sport) {
   const comp = d.header.competitions[0], st = comp.status, state = st.type.state;
   const detail = st.type.shortDetail || "";
@@ -92,8 +94,8 @@ function parseGame(d, sport) {
       if (!a.athlete) continue;
       const nm = a.athlete.displayName, g = {};
       for (const x of a.stats || []) g[x.name] = Number(x.value) || 0;
-      people[norm(nm)] = {name: nm, team: tab, groups: {espn: g}, strs: {}, played: !!(a.starter || a.subbedIn),
-        subbed_out: !!a.subbedOut, subbed_to: a.subbedOutFor && a.subbedOutFor.athlete ? a.subbedOutFor.athlete.displayName : null};
+      people[norm(nm)] = {name: nm, team: tab, groups: {espn: g}, strs: {}, played: !!(a.starter || didSub(a.subbedIn)),
+        subbed_out: didSub(a.subbedOut), subbed_to: a.subbedOutFor && a.subbedOutFor.athlete ? a.subbedOutFor.athlete.displayName : null};
     }
   }
   if (sport === "nhl") { // power-play points from scoring plays (box score has no PP G/A)
@@ -182,7 +184,11 @@ function evalSoccer(leg, g) {
 }
 
 function evalLeg(leg, g) {
-  if (leg.stat === "manual") return {...leg, value: "–", status: ["HIT", "MISS", "VOID?"].includes(leg.manual_result) ? leg.manual_result : "MANUAL", note: "manual: grade by hand"};
+  if (leg.stat === "manual") { // graded by hand; before kickoff (or game not loaded yet) it is simply not started
+    if (["HIT", "MISS", "VOID?"].includes(leg.manual_result)) return {...leg, value: "–", status: leg.manual_result, note: "manual: " + leg.manual_result};
+    const started = g && (g.state === "in" || g.state === "post");
+    return {...leg, value: "–", status: started ? "MANUAL" : "PENDING", note: started ? "manual: grade by hand" : "manual: not started"};
+  }
   if (!g) return null;
   if (g.sport === "soccer" || SOCCER[leg.stat] && !STATS[leg.stat]) return evalSoccer(leg, g);
   const p = findPerson(g, leg.player, leg.sheet_team || leg.team);
@@ -228,7 +234,22 @@ try { collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}"); } catc
 const params = new URLSearchParams(location.search);
 const focusId = params.get("focus");
 
-function startET(g) { return g.start_utc ? etTime(new Date(g.start_utc)) : (g.start_et || ""); }
+const etDay = (d) => new Intl.DateTimeFormat("en-CA", {timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit"}).format(d);
+// Kickoff in ET; prefix the day ("Sun Oct 11") when the game is not on the page's date (cross-day legs).
+function startET(g) {
+  if (!g.start_utc) return g.start_et || "";
+  const d = new Date(g.start_utc), t = etTime(d);
+  if (DATA && DATA.date && etDay(d) !== DATA.date) return new Intl.DateTimeFormat("en-US", {timeZone: TZ, weekday: "short", month: "short", day: "numeric"}).format(d) + " " + t;
+  return t;
+}
+const LEAGUE_DEFAULT = {soccer: "eng.1"};
+const SPORT_PATH = {nhl: "hockey/nhl", mlb: "baseball/mlb", nfl: "football/nfl"};
+function summaryURL(g) { // server gives summary_url; fall back to the game's own league (soccer: eng.1, esp.1, ger.1, ...)
+  if (g.summary_url) return g.summary_url;
+  if (!g.id) return null;
+  const path = g.sport === "soccer" ? "soccer/" + (g.league || LEAGUE_DEFAULT.soccer) : SPORT_PATH[g.sport];
+  return path ? `https://site.web.api.espn.com/apis/site/v2/sports/${path}/summary?event=${g.id}` : null;
+}
 
 function gameHead(key) {
   const g = gameInfo(key);
@@ -240,16 +261,17 @@ function gameHead(key) {
   return `<div class="ghead"><span class="m">${esc(names)}</span><span class="t">${esc(startET(g))}</span>${st}</div>`;
 }
 
-function legHTML(l) {
+function legHTML(l, i) {
   const cls = {"VOID?": "VOID", "NOT FOUND": "NF"}[l.status] || l.status;
   const na = typeof l.value !== "number";
   const frac = na ? 0 : l.target ? Math.min(l.value / l.target, 1) : 1;
   const stat = l.stat === "k" ? `K o${l.line ?? l.target - 0.5}` : (l.unit || ABBR[l.stat] || (l.stat ? String(l.stat).replace(/_/g, " ").toUpperCase() : ((DATA.games[l.game] || {}).sport || "nhl") === "nhl" ? "SOG" : ""));
   const tm = espnTeam(l.team || l.sheet_team);
   const note = l.note && !["on roster", "in lineup"].includes(l.note) ? `<span class="nt">${esc(l.note)}</span>` : "";
-  const title = `${l.player} (${tm}) ${stat} ${l.value}/${l.target} ${l.status}`;
-  return `<div class="leg ${cls}" title="${esc(title)}"><span class="dot"></span>` +
-    `<span class="nm">${esc(l.player)} ${tm ? `<span class="tm">(${esc(tm)})</span>` : ""}<span class="st">${esc(stat)}</span>${note}</span>` +
+  const who = l.player || l.label || "";
+  const title = `${who} (${tm}) ${stat} ${l.value}/${l.target} ${l.status}`;
+  return `<div class="leg ${cls}" data-i="${i}" title="${esc(title)}"><span class="dot"></span>` +
+    `<span class="nm">${esc(who)} ${tm ? `<span class="tm">(${esc(tm)})</span>` : ""}<span class="st">${esc(stat)}</span>${note}</span>` +
     `<span class="v">${na ? "–" : l.value}<span class="tg">/${l.target}</span></span>` +
     `<span class="bar"><i style="width:${(frac * 100).toFixed(1)}%"></i></span></div>`;
 }
@@ -297,7 +319,7 @@ function render() {
     const cls = b.status === "alive" && !b.anyStarted ? "pending" : b.status;
     const pill = {alive: b.anyStarted ? "ALIVE" : "NOT STARTED", won: "WON", lost: "LOST"}[b.status];
     const games = [...new Set(b.legs.map((l) => l.game))];
-    const body = games.map((gk) => gameHead(gk) + b.legs.filter((l) => l.game === gk).map(legHTML).join("")).join("");
+    const body = games.map((gk) => gameHead(gk) + b.legs.map((l, i) => [l, i]).filter(([l]) => l.game === gk).map(([l, i]) => legHTML(l, i)).join("")).join("");
     const bonus = b.bonus || Number(b.bonus_stake || 0) > 0;
     const isNet = !!(b.boost && b.boost.type === "safety_net");
     const bpct = isNet ? 0 : Number((b.boost && b.boost.pct) || ((b.title || "").match(/(\d+)%[^)]*boost|boost\s*(\d+)%/i) || []).slice(1).find(Boolean) || 0);
@@ -378,7 +400,7 @@ async function refresh() {
     const res = await Promise.allSettled(keys.map(async (k) => {
       const g = DATA.games[k];
       const [es, fm] = await Promise.allSettled([
-        g.summary_url ? getJSON(g.summary_url + (g.summary_url.includes("?") ? "&" : "?") + "_=" + Date.now()).then((d) => parseGame(d, g.sport)) : Promise.reject(new Error("no url")),
+        summaryURL(g) ? getJSON(summaryURL(g) + (summaryURL(g).includes("?") ? "&" : "?") + "_=" + Date.now()).then((d) => parseGame(d, g.sport)) : Promise.reject(new Error("no url")),
         g.sport === "soccer" ? fotmobGame(k, g) : Promise.reject(new Error("n/a")),
       ]);
       if (es.status !== "fulfilled" && fm.status !== "fulfilled") throw es.reason;
