@@ -187,7 +187,7 @@ function evalLeg(leg, g) {
   if (leg.stat === "manual") { // graded by hand; before kickoff (or game not loaded yet) it is simply not started
     if (["HIT", "MISS", "VOID?"].includes(leg.manual_result)) return {...leg, value: "–", status: leg.manual_result, note: "manual: " + leg.manual_result};
     const started = g && (g.state === "in" || g.state === "post");
-    return {...leg, value: "–", status: started ? "MANUAL" : "PENDING", note: started ? "manual: grade by hand" : "manual: not started"};
+    return {...leg, value: "–", status: started ? "MANUAL" : "PENDING", note: started ? "in play" : ""};
   }
   if (!g) return null;
   if (g.sport === "soccer" || SOCCER[leg.stat] && !STATS[leg.stat]) return evalSoccer(leg, g);
@@ -265,14 +265,14 @@ function legHTML(l, i) {
   const cls = {"VOID?": "VOID", "NOT FOUND": "NF"}[l.status] || l.status;
   const na = typeof l.value !== "number";
   const frac = na ? 0 : l.target ? Math.min(l.value / l.target, 1) : 1;
-  const stat = l.stat === "k" ? `K o${l.line ?? l.target - 0.5}` : (l.unit || ABBR[l.stat] || (l.stat ? String(l.stat).replace(/_/g, " ").toUpperCase() : ((DATA.games[l.game] || {}).sport || "nhl") === "nhl" ? "SOG" : ""));
+  const stat = l.stat === "manual" ? "" : l.stat === "k" ? `K o${l.line ?? l.target - 0.5}` : (l.unit || ABBR[l.stat] || (l.stat ? String(l.stat).replace(/_/g, " ").toUpperCase() : ((DATA.games[l.game] || {}).sport || "nhl") === "nhl" ? "SOG" : ""));
   const tm = espnTeam(l.team || l.sheet_team);
   const note = l.note && !["on roster", "in lineup"].includes(l.note) ? `<span class="nt">${esc(l.note)}</span>` : "";
   const who = l.player || l.label || "";
   const title = `${who} (${tm}) ${stat} ${l.value}/${l.target} ${l.status}`;
   return `<div class="leg ${cls}" data-i="${i}" title="${esc(title)}"><span class="dot"></span>` +
     `<span class="nm">${esc(who)} ${tm ? `<span class="tm">(${esc(tm)})</span>` : ""}<span class="st">${esc(stat)}</span>${note}</span>` +
-    `<span class="v">${na ? "–" : l.value}<span class="tg">/${l.target}</span></span>` +
+    (l.stat === "manual" ? `<span class="v">${l.status === "HIT" ? "✓" : l.status === "MISS" ? "✗" : "–"}</span>` : `<span class="v">${na ? "–" : l.value}<span class="tg">/${l.target}</span></span>`) +
     `<span class="bar"><i style="width:${(frac * 100).toFixed(1)}%"></i></span></div>`;
 }
 
