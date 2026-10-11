@@ -286,6 +286,7 @@ function evalSoccer(leg, g) {
 }
 
 function evalLeg(leg, g) {
+  if (leg.stat !== "manual" && ["HIT", "MISS", "VOID?"].includes(leg.manual_result)) return {...leg, value: leg.value ?? "–", status: leg.manual_result, note: leg.note || ("graded: " + leg.manual_result)};
   if (leg.stat === "manual") { // graded by hand; before kickoff (or game not loaded yet) it is simply not started
     if (["HIT", "MISS", "VOID?"].includes(leg.manual_result)) return {...leg, value: "–", status: leg.manual_result, note: "manual: " + leg.manual_result};
     const started = g && (g.state === "in" || g.state === "post");
