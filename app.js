@@ -317,7 +317,8 @@ function recompute() {
     const hit = sts.filter((s) => s === "HIT").length, live = sts.filter((s) => s === "LIVE").length,
           lost = sts.filter((s) => s === "MISS").length;
     let status;
-    if (lost) status = "lost";
+    if (b.cashed_out || /cash/i.test(b.status || "")) status = "cashed";
+    else if (lost) status = "lost";
     else if (sts.every((s) => s === "HIT" || s === "VOID?")) status = "won";
     else status = "alive";
     return {...b, legs, hit, live, lost, pending: legs.length - hit - live - lost, status,
@@ -389,7 +390,7 @@ function render() {
   if (!DATA) return;
   renderDayNav();
   const bets = recompute();
-  const order = {alive: 0, won: 0, lost: 1};
+  const order = {alive: 0, won: 0, lost: 1, cashed: 2};
   const pin = (b) => (focusId && b.id === focusId ? 0 : 1); // ?focus=Row%2088 pins that bet to the top
   const sorted = bets.map((b, i) => [b, i]).sort((a, b) => pin(a[0]) - pin(b[0]) || order[a[0].status] - order[b[0].status] || a[1] - b[1]).map((x) => x[0]);
   const staked = bets.reduce((a, b) => a + b.stake, 0), pot = bets.reduce((a, b) => a + b.payout, 0);
