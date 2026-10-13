@@ -393,7 +393,7 @@ function render() {
   const bets = recompute();
   const order = {alive: 0, won: 0, lost: 1, cashed: 2};
   const pin = (b) => (focusId && b.id === focusId ? 0 : 1); // ?focus=Row%2088 pins that bet to the top
-  const sorted = bets.map((b, i) => [b, i]).sort((a, b) => pin(a[0]) - pin(b[0]) || order[a[0].status] - order[b[0].status] || a[1] - b[1]).map((x) => x[0]);
+  const sorted = bets.map((b, i) => [b, i]).sort((a, b) => pin(a[0]) - pin(b[0]) || (!!a[0].forced - !!b[0].forced) || order[a[0].status] - order[b[0].status] || a[1] - b[1]).map((x) => x[0]);
   const staked = bets.reduce((a, b) => a + b.stake, 0), pot = bets.reduce((a, b) => a + b.payout, 0);
   const alive = bets.filter((b) => b.status === "alive"), won = bets.filter((b) => b.status === "won"), lost = bets.filter((b) => b.status === "lost");
   const stillLive = alive.concat(won).reduce((a, b) => a + b.payout, 0);
@@ -431,7 +431,7 @@ function render() {
     const bpct = isNet ? 0 : Number((b.boost && b.boost.pct) || ((b.title || "").match(/(\d+)%[^)]*boost|boost\s*(\d+)%/i) || []).slice(1).find(Boolean) || 0);
     const boostChip = isNet ? `<span class="chip net-pill">🛡 $${esc(String(b.boost.pct || 10))} NET</span>` : (bpct > 0 ? `<span class="chip boost-pill">⚡ +${bpct}%</span>` : "");
     const ttl = (b.title || b.id).replace(/\s*\([^)]*\bboost\b[^)]*\)/ig, "").replace(/\s*\b\d+%\s*(profit|parlay)?\s*boost\b/ig, "").trim() || b.id;
-    const payChip = bonus ? `<span class="chip pay bonus-pay"><b>${wholeMoney(b.bonus_stake || b.stake)}</b> → <b>${money(b.payout)}</b></span>` : `<span class="chip pay">${money(b.stake)} → <b>${money(b.payout)}</b></span>`;
+    const payChip = bonus ? `<span class="chip pay bonus-pay">BONUS <b>${wholeMoney(b.bonus_stake || b.stake)}</b> → <b>${money(b.payout)}</b></span>` : `<span class="chip pay">${money(b.stake)} → <b>${money(b.payout)}</b></span>`;
     return `<article class="card ${cls}${isCollapsed(b) ? " collapsed" : ""}" id="${esc(b.id.replace(/\s+/g, "-"))}" data-id="${esc(b.id)}">
       <button class="chead" aria-expanded="${!isCollapsed(b)}">
         <div class="crow"><span class="chev">▼</span><span class="ctitle" title="${esc(b.title)}">${esc(ttl)}</span>${bookBadge(b.book)}<span class="pill">${pill}</span></div>
