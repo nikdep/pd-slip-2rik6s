@@ -392,8 +392,9 @@ function render() {
   renderDayNav();
   const bets = recompute();
   const order = {won: 0, alive: 1, cashed: 2, lost: 3};
+  const rank = (b) => (b.status === "alive" && !b.anyStarted ? 4 : order[b.status]); // bets that haven't started always sit at the bottom
   const pin = (b) => (focusId && b.id === focusId ? 0 : 1); // ?focus=Row%2088 pins that bet to the top
-  const sorted = bets.map((b, i) => [b, i]).sort((a, b) => pin(a[0]) - pin(b[0]) || order[a[0].status] - order[b[0].status] || (!!a[0].forced - !!b[0].forced) || a[1] - b[1]).map((x) => x[0]);
+  const sorted = bets.map((b, i) => [b, i]).sort((a, b) => pin(a[0]) - pin(b[0]) || rank(a[0]) - rank(b[0]) || (!!a[0].forced - !!b[0].forced) || a[1] - b[1]).map((x) => x[0]);
   const staked = bets.reduce((a, b) => a + b.stake, 0), pot = bets.reduce((a, b) => a + b.payout, 0);
   const alive = bets.filter((b) => b.status === "alive"), won = bets.filter((b) => b.status === "won"), lost = bets.filter((b) => b.status === "lost");
   const stillLive = alive.concat(won).reduce((a, b) => a + b.payout, 0);
