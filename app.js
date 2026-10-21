@@ -16,7 +16,9 @@ const STATS = { // stat -> [box-score group or null, keys summed, word]
 // Same stat name, different box-score home per sport (NHL "hits" = skater hits, not MLB batting hits).
 const SPORT_STATS = {nhl: {hits: [null, ["hits"]], blocks: [null, ["blockedShots"]], assists: [null, ["assists"]],
   goals: [null, ["goals"]], points: [null, ["goals", "assists"]], sog: [null, ["shotsTotal"]], saves: ["goalies", ["saves"]],
-  pp_points: ["pp", ["ppPoints"]]}};
+  pp_points: ["pp", ["ppPoints"]]},
+  nba: {points: [null, ["points"]], rebounds: [null, ["rebounds"]], assists: [null, ["assists"]], steals: [null, ["steals"]],
+  blocks: [null, ["blocks"]]}};
 // NFL stats summed across ESPN box-score groups (rushing / receiving are separate groups)
 const MULTI = {rush_rec_yds: [["rushing", "rushingYards"], ["receiving", "receivingYards"]],
   anytime_td: [["rushing", "rushingTouchdowns"], ["receiving", "receivingTouchdowns"], ["kickReturns", "kickReturnTouchdowns"], ["puntReturns", "puntReturnTouchdowns"]]};
