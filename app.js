@@ -2,7 +2,7 @@
   progress every 30s from ESPN box scores (soccer: FotMob player stats first, ESPN fallback). */
 "use strict";
 const REFRESH_MS = 30000;
-const APP_VERSION = 27; // bets.json "app_version" above this -> reload once to pick up new app code
+const APP_VERSION = 29; // bets.json "app_version" above this -> reload once to pick up new app code
 const TZ = "America/Toronto";
 const STATS = { // stat -> [box-score group or null, keys summed, word]
   sog: [null, ["shotsTotal"], "shots"], saves: ["goalies", ["saves"], "saves"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
@@ -288,7 +288,7 @@ function evalSoccer(leg, g) {
   return {...leg, value: val === null ? "n/a" : val, status, note: combo || note, src, team: ep ? ep.team : leg.team};
 }
 
-function evalLeg(leg, g) {
+function evalLegClient(leg, g) {
   if (leg.stat !== "manual" && ["HIT", "MISS", "VOID?"].includes(leg.manual_result)) return {...leg, value: leg.value ?? "–", status: leg.manual_result, note: leg.note || ("graded: " + leg.manual_result)};
   if (leg.stat === "manual") { // graded by hand; before kickoff (or game not loaded yet) it is simply not started
     if (["HIT", "MISS", "VOID?"].includes(leg.manual_result)) return {...leg, value: "–", status: leg.manual_result, note: "manual: " + leg.manual_result};
@@ -314,6 +314,19 @@ function evalLeg(leg, g) {
   return {...leg, value: val, status, note, team: p ? p.team : leg.team};
 }
 
+
+// Server is authoritative: never downgrade a server HIT/graded leg, never show 0 for a stat the client can't compute.
+const CLIENT_KNOWN = (stat, sport) => !!(MULTI[stat] || (SPORT_STATS[sport] || {})[stat] || STATS[stat] || SOCCER[stat] || TEAM_STATS.has(stat) || HALF_STATS[stat] || stat === "manual");
+function evalLeg(leg, g) {
+  const r = evalLegClient(leg, g);
+  const sv = typeof leg.value === "number" ? leg.value : null, ss = leg.status;
+  if (!r) return r;
+  if (ss === "HIT" || ss === "MISS" && g && g.state === "post") return {...r, value: sv ?? r.value, status: ss, note: r.note};
+  if (g && !CLIENT_KNOWN(leg.stat, g.sport) && sv !== null) return {...r, value: sv, status: ss || r.status};
+  if (sv !== null && typeof r.value === "number" && sv > r.value) return {...r, value: sv, status: ss || r.status};
+  return r;
+}
+
 function recompute() {
   const bets = DATA.bets.map((b) => {
     const legs = b.legs.map((l) => evalLeg(l, LIVE[l.game]) || l);
@@ -322,6 +335,8 @@ function recompute() {
           lost = sts.filter((s) => s === "MISS").length;
     let status;
     if (b.cashed_out || /cash/i.test(b.status || "")) status = "cashed";
+    else if ((b.graded || /^(WON|WIN|LOST|LOSS|LOSE)$/i.test(b.raw_status || "")) && ["won", "lost"].includes(b.status)) status = b.status; // sheet-graded: never overridden client-side
+    else if (b.status === "won") status = "won"; // server already says won: never downgrade
     else if (lost) status = "lost";
     else if (sts.every((s) => s === "HIT" || s === "VOID?")) status = "won";
     else status = "alive";
@@ -540,4 +555,4 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) refr
 setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_MS);
 getJSON("days/index.json").then((d) => { DAY_INDEX = d.dates || []; }).catch(() => {});
 refresh();
-if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+if ("serviceWorker" in navigator) window.addEventListener("load", () => navigator.serviceWorker.register("sw.js?v=38", {updateViaCache: "none"}).then((r) => r.update()).catch(() => {}));
