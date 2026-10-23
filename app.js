@@ -7,7 +7,7 @@ const TZ = "America/Toronto";
 const STATS = { // stat -> [box-score group or null, keys summed, word]
   sog: [null, ["shotsTotal"], "shots"], saves: ["goalies", ["saves"], "saves"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
   goals: [null, ["goals"], "goals"], hits: ["batting", ["hits"], "hits"],
-  hr: ["batting", ["homeRuns"], "home runs"], k: ["pitching", ["strikeouts"], "strikeouts"],
+  hr: ["batting", ["homeRuns"], "home runs"], k: ["pitching", ["strikeouts"], "strikeouts"], hrr: ["batting", ["hits", "runs", "RBIs"], "hits+runs+RBIs"],
   rush_yds: ["rushing", ["rushingYards"], "rush yds"], rec_yds: ["receiving", ["receivingYards"], "rec yds"],
   rush_rec_yds: ["multi", [], "rush+rec yds"], anytime_td: ["multi", [], "TDs"],
   pass_yds: ["passing", ["passingYards"], "pass yds"], blocks: [null, ["blockedShots"], "blocked shots"],
