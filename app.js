@@ -18,7 +18,8 @@ const SPORT_STATS = {nhl: {hits: [null, ["hits"]], blocks: [null, ["blockedShots
   goals: [null, ["goals"]], points: [null, ["goals", "assists"]], sog: [null, ["shotsTotal"]], saves: ["goalies", ["saves"]],
   pp_points: ["pp", ["ppPoints"]]},
   nba: {points: [null, ["points"]], rebounds: [null, ["rebounds"]], assists: [null, ["assists"]], steals: [null, ["steals"]],
-  blocks: [null, ["blocks"]]}};
+  blocks: [null, ["blocks"]], pts_reb: [null, ["points", "rebounds"]], pra: [null, ["points", "rebounds", "assists"]],
+  pts_ast: [null, ["points", "assists"]], reb_ast: [null, ["rebounds", "assists"]], threes: [null, ["threePointFieldGoalsMade-threePointFieldGoalsAttempted"]], fg3m: [null, ["threePointFieldGoalsMade-threePointFieldGoalsAttempted"]]}};
 // NFL stats summed across ESPN box-score groups (rushing / receiving are separate groups)
 const MULTI = {rush_rec_yds: [["rushing", "rushingYards"], ["receiving", "receivingYards"]],
   anytime_td: [["rushing", "rushingTouchdowns"], ["receiving", "receivingTouchdowns"], ["kickReturns", "kickReturnTouchdowns"], ["puntReturns", "puntReturnTouchdowns"]]};
