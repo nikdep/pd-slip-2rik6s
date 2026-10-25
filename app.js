@@ -1,3 +1,4 @@
+/* NFL tackles fix v41 */
 /* Bet Slip PWA: loads bets.json (bet definitions + server snapshot) and re-computes live
   progress every 30s from ESPN box scores (soccer: FotMob player stats first, ESPN fallback). */
 "use strict";
