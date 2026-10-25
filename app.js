@@ -12,6 +12,7 @@ const STATS = { // stat -> [box-score group or null, keys summed, word]
   rush_rec_yds: ["multi", [], "rush+rec yds"], anytime_td: ["multi", [], "TDs"],
   pass_yds: ["passing", ["passingYards"], "pass yds"], blocks: [null, ["blockedShots"], "blocked shots"],
   assists: [null, ["assists"], "assists"], pp_points: ["pp", ["ppPoints"], "PP points"],
+  tackles: ["defensive", ["totalTackles"], "tackles"],
 };
 // Same stat name, different box-score home per sport (NHL "hits" = skater hits, not MLB batting hits).
 const SPORT_STATS = {nhl: {hits: [null, ["hits"]], blocks: [null, ["blockedShots"]], assists: [null, ["assists"]],
@@ -19,7 +20,10 @@ const SPORT_STATS = {nhl: {hits: [null, ["hits"]], blocks: [null, ["blockedShots
   pp_points: ["pp", ["ppPoints"]]},
   nba: {points: [null, ["points"]], rebounds: [null, ["rebounds"]], assists: [null, ["assists"]], steals: [null, ["steals"]],
   blocks: [null, ["blocks"]], pts_reb: [null, ["points", "rebounds"]], pra: [null, ["points", "rebounds", "assists"]],
-  pts_ast: [null, ["points", "assists"]], reb_ast: [null, ["rebounds", "assists"]], threes: [null, ["threePointFieldGoalsMade-threePointFieldGoalsAttempted"]], fg3m: [null, ["threePointFieldGoalsMade-threePointFieldGoalsAttempted"]]}};
+  pts_ast: [null, ["points", "assists"]], reb_ast: [null, ["rebounds", "assists"]], threes: [null, ["threePointFieldGoalsMade-threePointFieldGoalsAttempted"]], fg3m: [null, ["threePointFieldGoalsMade-threePointFieldGoalsAttempted"]]},
+  nfl: {tackles: ["defensive", ["totalTackles"]], receptions: ["receiving", ["receptions"]],
+  rush_yds: ["rushing", ["rushingYards"]], rec_yds: ["receiving", ["receivingYards"]],
+  pass_yds: ["passing", ["passingYards"]], pass_tds: ["passing", ["passingTouchdowns"]]}};
 // NFL stats summed across ESPN box-score groups (rushing / receiving are separate groups)
 const MULTI = {rush_rec_yds: [["rushing", "rushingYards"], ["receiving", "receivingYards"]],
   anytime_td: [["rushing", "rushingTouchdowns"], ["receiving", "receivingTouchdowns"], ["kickReturns", "kickReturnTouchdowns"], ["puntReturns", "puntReturnTouchdowns"]]};
@@ -298,7 +302,7 @@ function evalLegClient(leg, g) {
   if (!g) return null;
   if (TEAM_STATS.has(leg.stat)) return evalTeamLeg(leg, g);
   if (HALF_STATS[leg.stat]) return evalHalfLeg(leg, g);
-  if (g.sport === "soccer" || SOCCER[leg.stat] && !STATS[leg.stat]) return evalSoccer(leg, g);
+  if (g.sport === "soccer") return evalSoccer(leg, g);
   const p = findPerson(g, leg.player, leg.sheet_team || leg.team);
   const val = p && (g.state === "in" || g.state === "post") ? statValue(p, leg.stat, g.sport) : 0;
   let status;
