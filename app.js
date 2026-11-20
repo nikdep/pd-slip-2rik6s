@@ -1,9 +1,8 @@
-/* NFL tackles fix v41 */
 /* Bet Slip PWA: loads bets.json (bet definitions + server snapshot) and re-computes live
   progress every 30s from ESPN box scores (soccer: FotMob player stats first, ESPN fallback). */
 "use strict";
 const REFRESH_MS = 30000;
-const APP_VERSION = 29; // bets.json "app_version" above this -> reload once to pick up new app code
+const APP_VERSION = 30; // bets.json "app_version" above this -> reload once to pick up new app code
 const TZ = "America/Toronto";
 const STATS = { // stat -> [box-score group or null, keys summed, word]
   sog: [null, ["shotsTotal"], "shots"], saves: ["goalies", ["saves"], "saves"], receptions: ["receiving", ["receptions"], "receptions"], pass_tds: ["passing", ["passingTouchdowns"], "passing TDs"], points: [null, ["goals", "assists"], "points"],
@@ -158,9 +157,20 @@ function legSide(leg, g, key) {
   if (tm && tm === a) return "away"; if (tm && tm === h) return "home";
   return null;
 }
-// over lines HIT as soon as reached, MISS at FT; under lines (leg.under) MISS when passed, HIT at FT
+// over lines HIT as soon as reached, MISS at FT; under lines MISS when passed, HIT at FT
+function isUnder(leg) {
+  return !!(leg.under || String(leg.side || "").toLowerCase() === "under");
+}
+function ouLine(leg) {
+  return leg.line != null ? Number(leg.line) : (leg.target != null ? Number(leg.target) - 0.5 : null);
+}
+function ouTag(leg) {
+  const line = ouLine(leg);
+  if (line == null || Number.isNaN(line)) return "";
+  return (isUnder(leg) ? "u" : "o") + line;
+}
 function overUnder(leg, g, val) {
-  if (leg.under) return val > (leg.line ?? leg.target - 0.5) ? "MISS" : g.state === "post" ? "HIT" : "LIVE";
+  if (isUnder(leg)) return val > (ouLine(leg) ?? leg.target - 0.5) ? "MISS" : g.state === "post" ? "HIT" : "LIVE";
   return val >= leg.target ? "HIT" : g.state === "post" ? "MISS" : "LIVE";
 }
 function evalTeamLeg(leg, g) {
@@ -285,6 +295,11 @@ function evalSoccer(leg, g) {
   else if (val === null) {
     status = g.state === "post" ? "VOID?" : "LIVE";
     note = !found ? "not in lineup data yet" : "n/a live";
+  } else if (isUnder(leg)) {
+    if (val > (ouLine(leg) ?? leg.target - 0.5)) status = "MISS";
+    else if (ep && ep.subbed_out && leg.sub_protected !== true && !leg.subbed_from) { status = "HIT"; note = "subbed off under the line"; }
+    else if (g.state === "post") status = (ep && ep.played === false && !fp) ? "VOID?" : "HIT";
+    else status = "LIVE";
   } else if (val >= leg.target) status = "HIT";
   else if (ep && ep.subbed_out && leg.sub_protected !== true && !leg.subbed_from) { status = "MISS"; note = "subbed off before line"; }
   else if (g.state === "post") status = (ep && ep.played === false && !fp) ? "VOID?" : "MISS";
@@ -307,10 +322,12 @@ function evalLegClient(leg, g) {
   const p = findPerson(g, leg.player, leg.sheet_team || leg.team);
   const val = p && (g.state === "in" || g.state === "post") ? statValue(p, leg.stat, g.sport) : 0;
   let status;
-  if (val >= leg.target) status = "HIT";
-  else if (g.state === "post") status = p ? "MISS" : "VOID?";
-  else if (g.state === "in") status = p ? "LIVE" : "NOT FOUND";
-  else status = "PENDING";
+  if (g.state !== "in" && g.state !== "post") status = "PENDING";
+  else if (!p) status = g.state === "post" ? "VOID?" : "NOT FOUND";
+  else {
+    status = overUnder(leg, g, val);
+    if (status === "LIVE" && isUnder(leg) && p.subbed_out && leg.sub_protected !== true && !leg.subbed_from) status = "HIT";
+  }
   if (status === "LIVE" && leg.stat === "k" && p && p.pulled) status = "MISS"; // starter relieved: no more Ks
   const noBox = !Object.keys(g.people).length;
   if (status === "NOT FOUND" && (noBox || g.sport === "nfl")) status = "PENDING"; // early NFL box score may omit offensive stats
@@ -356,7 +373,7 @@ function gameInfo(key) {
   return {...s, ...Object.fromEntries(Object.entries(l).filter(([k]) => k !== "people"))};
 }
 
-const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "PASS TD", rush_yds: "RUSH YDS", rec_yds: "REC YDS", rush_rec_yds: "RUSH+REC YDS", anytime_td: "ANYTIME TD", pass_yds: "PASS YDS", blocks: "BLK", pp_points: "PPP", manual: "MANUAL", team_corners: "CORNERS", team_sot: "TEAM SOT", team_shots: "TEAM SHOTS", match_corners: "MATCH CORNERS", team_goals: "TEAM GOALS", match_goals: "MATCH GOALS", btts: "BTTS", sot_1h: "1H SOT", shots_1h: "1H SHOTS", points: "PTS", goals: "G", hits: "H", hr: "HR", k: "K"};
+const ABBR = {shots: "SHOTS", sot: "SOT", tackles: "TACKLES", fouls_won: "FOULS WON", fouls_committed: "FOULS", assists: "AST", sog: "SOG", receptions: "REC", pass_tds: "PASS TD", rush_yds: "RUSH YDS", rec_yds: "REC YDS", rush_rec_yds: "RUSH+REC YDS", anytime_td: "ANYTIME TD", pass_yds: "PASS YDS", blocks: "BLK", pp_points: "PPP", manual: "MANUAL", team_corners: "CORNERS", team_sot: "TEAM SOT", team_shots: "TEAM SHOTS", match_corners: "MATCH CORNERS", team_goals: "TEAM GOALS", match_goals: "MATCH GOALS", btts: "BTTS", sot_1h: "1H SOT", shots_1h: "1H SHOTS", points: "PTS", rebounds: "REB", threes: "3PM", steals: "STL", pts_reb: "P+R", pra: "PRA", pts_ast: "P+A", reb_ast: "R+A", goals: "G", hits: "H", hr: "HR", k: "K"};
 const COLLAPSE_KEY = "betslip-collapsed";
 let collapsed = {};
 try { collapsed = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "{}"); } catch (e) { collapsed = {}; }
@@ -393,15 +410,19 @@ function gameHead(key) {
 function legHTML(l, i) {
   const cls = {"VOID?": "VOID", "NOT FOUND": "NF"}[l.status] || l.status;
   const na = typeof l.value !== "number";
-  const frac = na ? 0 : l.target ? Math.min(l.value / l.target, 1) : 1;
-  const stat = l.stat === "manual" ? "" : l.stat === "k" ? `K o${l.line ?? l.target - 0.5}` : (l.unit || ABBR[l.stat] || (l.stat ? String(l.stat).replace(/_/g, " ").toUpperCase() : ((DATA.games[l.game] || {}).sport || "nhl") === "nhl" ? "SOG" : ""));
+  const tag = l.stat === "manual" ? "" : ouTag(l);
+  const lineForBar = ouLine(l);
+  const frac = na ? 0 : (lineForBar ? Math.min(l.value / (isUnder(l) ? lineForBar : (l.target || lineForBar)), 1) : (l.target ? Math.min(l.value / l.target, 1) : 1));
+  const base = l.stat === "manual" ? "" : (l.unit || ABBR[l.stat] || (l.stat ? String(l.stat).replace(/_/g, " ").toUpperCase() : ((DATA.games[l.game] || {}).sport || "nhl") === "nhl" ? "SOG" : ""));
+  const stat = l.stat === "manual" ? "" : (tag ? `${base} ${tag}`.trim() : base);
   const tm = l.stat === "manual" || ["match_corners", "match_goals", "btts"].includes(l.stat) ? "" : espnTeam(l.team || l.sheet_team);
   const note = l.note && !["on roster", "in lineup"].includes(l.note) ? `<span class="nt">${esc(l.note)}</span>` : "";
   const who = l.stat === "manual" || TEAM_STATS.has(l.stat) ? (l.label || l.player || "") : (l.player || l.label || "");
-  const title = `${who} (${tm}) ${stat} ${l.value}/${l.target} ${l.status}`;
+  const shownTg = tag ? "/" + tag : "/" + l.target;
+  const title = `${who} (${tm}) ${stat} ${l.value}${shownTg} ${l.status}`;
   return `<div class="leg ${cls}" data-i="${i}" title="${esc(title)}"><span class="dot"></span>` +
     `<span class="nm">${esc(who)} ${tm ? `<span class="tm">(${esc(tm)})</span>` : ""}<span class="st">${esc(stat)}</span>${note}</span>` +
-    (l.stat === "manual" ? `<span class="v">${l.status === "HIT" ? "✓" : l.status === "MISS" ? "✗" : "–"}</span>` : `<span class="v">${l.disp != null ? esc(l.disp) : na ? "–" : l.value}<span class="tg">${l.disp_tg != null ? esc(l.disp_tg) : "/" + l.target}</span></span>`) +
+    (l.stat === "manual" ? `<span class="v">${l.status === "HIT" ? "✓" : l.status === "MISS" ? "✗" : "–"}</span>` : `<span class="v">${l.disp != null ? esc(l.disp) : na ? "–" : l.value}<span class="tg">${l.disp_tg != null ? esc(l.disp_tg) : shownTg}</span></span>`) +
     `<span class="bar"><i style="width:${(frac * 100).toFixed(1)}%"></i></span></div>`;
 }
 
